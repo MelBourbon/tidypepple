@@ -523,6 +523,29 @@ test('gruppiert das Board nach Kontext', async ({ page }) => {
   await expect(page.getByRole('region', { name: '@telefon' }).getByRole('link', { name: 'Telefonat führen' })).toBeVisible();
 });
 
+test('scrollt lange Board-Spalten für sich, die Seite bleibt stehen', async ({ page }) => {
+  for (let i = 1; i <= 20; i++) await capture(page, `Karte ${i}`);
+  await go(page, 'Board');
+  await page.setViewportSize({ width: 900, height: 600 });
+
+  // Die Seite selbst scrollt nicht – sonst läge die horizontale Scrollleiste unter den Karten.
+  const [docHeight, viewport] = await page.evaluate(() => [document.documentElement.scrollHeight, window.innerHeight]);
+  expect(docHeight).toBeLessThanOrEqual(viewport!);
+  const list = page.getByRole('list').filter({ has: page.getByRole('link', { name: 'Karte 1', exact: true }) });
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+});
+
+test('verbreitert Board-Spalten auf breiten Bildschirmen, höchstens auf das Doppelte', async ({ page }) => {
+  await capture(page, 'Breite Karte');
+  await go(page, 'Board');
+  const column = page.getByRole('region').filter({ has: page.getByRole('link', { name: 'Breite Karte' }) });
+
+  await page.setViewportSize({ width: 3600, height: 800 });
+  expect((await column.boundingBox())!.width).toBeCloseTo(512, 0);
+  await page.setViewportSize({ width: 1000, height: 800 });
+  expect((await column.boundingBox())!.width).toBeCloseTo(256, 0);
+});
+
 test('sagt ohne eingerichteten Sync ehrlich, dass Daten nur lokal liegen (Need 7/14)', async ({ page }) => {
   await page.getByRole('link', { name: 'Einstellungen' }).click();
   await expect(page.getByRole('heading', { name: 'Einstellungen' })).toBeVisible();

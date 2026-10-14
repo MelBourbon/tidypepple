@@ -99,8 +99,10 @@ export function AppShell(): ReactNode {
         </div>
       </nav>
 
-      {/* pb-28: Platz für Bottom-Nav und FAB, damit nichts die letzte Karte verdeckt. */}
-      <main className="min-w-0 flex-1 pb-28 md:pb-8">
+      {/* pb-28: Platz für Bottom-Nav und FAB, damit nichts die letzte Karte verdeckt.
+          Board: genau Viewporthöhe, damit die Spalten selbst scrollen und die horizontale
+          Scrollleiste immer sichtbar am unteren Rand liegt. */}
+      <main className={['min-w-0 flex-1 pb-28 md:pb-8', wide ? 'flex h-dvh flex-col' : ''].join(' ')}>
         <Outlet />
       </main>
 
