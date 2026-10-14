@@ -1,0 +1,82 @@
+# Prüft jeden Push und jeden Pull Request.
+#
+# Vorher liefen die Tests nur, wenn jemand daran dachte. Jetzt sieht man an jedem Commit, ob
+# eine Änderung an einer Stelle etwas an einer ganz anderen kaputt gemacht hat. Zusammen mit
+# Branch Protection auf `master` (siehe docs/architecture.md, „Tests“) kommt Rotes gar nicht erst hinein.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Typecheck, Unit-Tests, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Ohne `.env` entsteht bewusst ein rein lokaler Build – genau den prüfen auch die E2E-Tests.
+      - run: npm run build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run e2e
+      - name: Traces der fehlgeschlagenen Tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
+  sql:
+    name: SQL-Tests (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      # Migrationen und Berechtigungen gegen echtes Postgres im Container.
+      - run: ./supabase/tests/run.sh
+
+  edge-function:
+    name: Edge Function (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      # Deno fände sonst die package.json im Wurzelverzeichnis und erwartete deren
+      # node_modules. Die Function lädt ihre Abhängigkeiten aber selbst (jsr:/npm:).
+      - run: deno check --node-modules-dir=none --no-lock lemonsqueezy-webhook/index.ts
+        working-directory: supabase/functions

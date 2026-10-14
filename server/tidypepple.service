@@ -1,0 +1,21 @@
+[Unit]
+Description=TidyPepple (statischer Server für den gebauten PWA-Build, HTTP + HTTPS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/tidypepple
+Environment=ROOT=/srv/tidypepple/dist
+Environment=HTTP_PORT=5175
+# HTTPS separat, weil Service Worker und Installierbarkeit einen secure context
+# verlangen – über eine LAN-IP per HTTP gibt es den nicht.
+Environment=HTTPS_PORT=5176
+Environment=CERT_DIR=/srv/tidypepple/server/certs
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

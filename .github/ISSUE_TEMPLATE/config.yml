@@ -1,0 +1,7 @@
+# Leere Issues bleiben erlaubt: „Fehler melden“ auf der Absturzseite der App öffnet ein
+# Issue mit vorausgefülltem Titel und Text (src/feedback.ts).
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/MelBourbon/tidypepple/security/advisories/new
+    about: Please report security problems privately.

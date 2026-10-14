@@ -1,0 +1,227 @@
+@import 'tailwindcss';
+@import './fonts.css';
+
+/*
+ * Design-Tokens nach Vercel Geist, mit den bisherigen TidyPepple-Farben als Basis
+ * (warmes Grau, Teal als Akzent). Regeln und Herleitung: docs/styleguide.md.
+ *
+ * Zwei Ebenen:
+ * 1. Skalen `--ds-*` mit Geist-Stufen 100–1000. Die Stufe sagt, *wofür* eine Farbe da ist
+ *    (100 Fläche, 400 Rahmen, 700 Solid, 900 Sekundärtext, 1000 Text) – nicht, wie hell
+ *    sie ist. Nur diese Ebene kennt Dark Mode.
+ * 2. Semantische Tailwind-Farben (`bg-surface`, `text-muted`, …). Komponenten benutzen
+ *    nur diese; die Standardpalette von Tailwind ist abgeschaltet, damit keine Rohfarbe
+ *    (`bg-white`, `text-gray-500`) hineinrutscht.
+ */
+:root {
+  --ds-background-100: #ffffff;
+  --ds-background-200: #faf9f7;
+
+  --ds-gray-100: #f2f0ec;
+  --ds-gray-200: #ebe8e3;
+  --ds-gray-300: #e5e1da;
+  --ds-gray-400: #e5e1da;
+  --ds-gray-500: #cfc9bf;
+  --ds-gray-600: #b3ada3;
+  --ds-gray-700: #8f8b84;
+  --ds-gray-800: #7c7973;
+  --ds-gray-900: #6c6963;
+  --ds-gray-1000: #1b1a18;
+
+  --ds-teal-100: #ebf7f4;
+  --ds-teal-200: #d7efea;
+  --ds-teal-300: #c4e6df;
+  --ds-teal-400: #a3d8cd;
+  --ds-teal-500: #6fbfb0;
+  --ds-teal-600: #2f998a;
+  --ds-teal-700: #0f766e;
+  --ds-teal-800: #0b615a;
+  --ds-teal-900: #0f766e;
+  --ds-teal-1000: #08403b;
+  --ds-teal-contrast: #ffffff;
+
+  --ds-red-100: #fdf0ee;
+  --ds-red-200: #fbe6e3;
+  --ds-red-400: #f0c4bd;
+  --ds-red-700: #b8342a;
+  --ds-red-900: #a8271d;
+
+  --ds-amber-100: #fff6e5;
+  --ds-amber-200: #fdefd2;
+  --ds-amber-400: #f2d59b;
+  --ds-amber-700: #e09b17;
+  --ds-amber-900: #8a5100;
+
+  --ds-overlay: rgb(27 26 24 / 0.3);
+  --ds-shadow-small: 0 2px 2px rgb(27 26 24 / 0.04);
+  --ds-shadow-menu:
+    0 1px 1px rgb(27 26 24 / 0.02), 0 4px 8px -4px rgb(27 26 24 / 0.06), 0 16px 24px -8px rgb(27 26 24 / 0.08);
+  --ds-shadow-modal:
+    0 1px 1px rgb(27 26 24 / 0.02), 0 8px 16px -4px rgb(27 26 24 / 0.06), 0 24px 32px -8px rgb(27 26 24 / 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ds-background-100: #1c1c1b;
+    --ds-background-200: #131313;
+
+    --ds-gray-100: #262624;
+    --ds-gray-200: #2b2a28;
+    --ds-gray-300: #31302d;
+    --ds-gray-400: #34332f;
+    --ds-gray-500: #4a4843;
+    --ds-gray-600: #67645e;
+    --ds-gray-700: #85827b;
+    --ds-gray-800: #93908a;
+    --ds-gray-900: #a09d96;
+    --ds-gray-1000: #f3f1ed;
+
+    --ds-teal-100: #0f2421;
+    --ds-teal-200: #143b36;
+    --ds-teal-300: #18463f;
+    --ds-teal-400: #1f5850;
+    --ds-teal-500: #2a7468;
+    --ds-teal-600: #3aa391;
+    --ds-teal-700: #5eead4;
+    --ds-teal-800: #99f6e4;
+    --ds-teal-900: #5eead4;
+    --ds-teal-1000: #ccfbf1;
+    --ds-teal-contrast: #0a3b35;
+
+    --ds-red-100: #2a1715;
+    --ds-red-200: #3a1e1b;
+    --ds-red-400: #5e2c26;
+    --ds-red-700: #ff8a80;
+    --ds-red-900: #ff8a80;
+
+    --ds-amber-100: #261a07;
+    --ds-amber-200: #33230a;
+    --ds-amber-400: #59400f;
+    --ds-amber-700: #f5b440;
+    --ds-amber-900: #f5b440;
+
+    --ds-overlay: rgb(0 0 0 / 0.6);
+    /* Im Dunkeln tragen Schatten kaum – die Kante kommt vom Rahmen, der Schatten nur von unten. */
+    --ds-shadow-small: 0 2px 2px rgb(0 0 0 / 0.2);
+    --ds-shadow-menu: 0 4px 8px -4px rgb(0 0 0 / 0.4), 0 16px 24px -8px rgb(0 0 0 / 0.5);
+    --ds-shadow-modal: 0 8px 16px -4px rgb(0 0 0 / 0.4), 0 24px 32px -8px rgb(0 0 0 / 0.6);
+  }
+}
+
+@theme {
+  /* Keine Rohfarben aus der Tailwind-Palette – nur die semantischen Namen unten. */
+  --color-*: initial;
+
+  --color-canvas: var(--ds-background-200);
+  --color-surface: var(--ds-background-100);
+  --color-raised: var(--ds-gray-100);
+  --color-raised-hover: var(--ds-gray-200);
+  --color-line: var(--ds-gray-400);
+  --color-line-strong: var(--ds-gray-500);
+  --color-ink: var(--ds-gray-1000);
+  --color-muted: var(--ds-gray-900);
+  --color-subtle: var(--ds-gray-700);
+  --color-accent: var(--ds-teal-700);
+  --color-accent-hover: var(--ds-teal-800);
+  --color-accent-ink: var(--ds-teal-contrast);
+  --color-accent-soft: var(--ds-teal-200);
+  --color-accent-line: var(--ds-teal-400);
+  --color-danger: var(--ds-red-900);
+  --color-danger-soft: var(--ds-red-200);
+  --color-danger-line: var(--ds-red-400);
+  --color-warn: var(--ds-amber-900);
+  --color-warn-soft: var(--ds-amber-200);
+  --color-warn-dot: var(--ds-amber-700);
+  --color-overlay: var(--ds-overlay);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* Materialien: Base 6px (Bedienelemente), Medium 12px (Karten, Menüs, Dialoge), Pill. */
+  --radius-md: 6px;
+  --radius-card: 12px;
+
+  /* Haarlinie zuerst, Schatten nur für Schwebendes. */
+  --shadow-small: var(--ds-shadow-small);
+  --shadow-menu: var(--ds-shadow-menu);
+  --shadow-modal: var(--ds-shadow-modal);
+
+  --font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Geist-Überschriften: Größe/Zeilenhöhe, enge Laufweite, 600. */
+  --text-heading-24: 1.5rem;
+  --text-heading-24--line-height: 2rem;
+  --text-heading-24--letter-spacing: -0.04em;
+  --text-heading-24--font-weight: 600;
+  --text-heading-20: 1.25rem;
+  --text-heading-20--line-height: 1.625rem;
+  --text-heading-20--letter-spacing: -0.02em;
+  --text-heading-20--font-weight: 600;
+  --text-heading-16: 1rem;
+  --text-heading-16--line-height: 1.5rem;
+  --text-heading-16--letter-spacing: -0.02em;
+  --text-heading-16--font-weight: 600;
+  --text-heading-14: 0.875rem;
+  --text-heading-14--line-height: 1.25rem;
+  --text-heading-14--letter-spacing: -0.01em;
+  --text-heading-14--font-weight: 600;
+}
+
+/* Abschnitts-Überschrift über Listen und Feldern: Label 12, Versalien, leicht gesperrt. */
+@utility text-overline {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+html {
+  background: var(--color-canvas);
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  -webkit-font-smoothing: antialiased;
+  /* Kein Gummiband-Scrollen der ganzen Seite in der installierten App. */
+  overscroll-behavior-y: none;
+}
+
+/*
+ * Sichtbarer Fokus nur bei Tastaturbedienung – Pflicht für die Shortcut-Navigation.
+ * In der Base-Layer, damit Utilities gewinnen: Felder mit `outline-none` zeigen ihren
+ * Fokus selbst (Rahmen oder Cursor), und Textfelder matchen `:focus-visible` auch beim
+ * Antippen – ungelayert lag sonst ein grüner Rahmen darüber.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Safe-Area-Insets, damit die Bottom-Nav auf dem iPhone nicht unter der Home-Indicator liegt. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+/*
+ * Oben addiert zum normalen Abstand statt ihn zu ersetzen: `pt-safe-4` = 1rem + Inset.
+ * Ein einfaches `pt-safe` neben `pt-4` hätte im Browser (Inset 0) den Abstand auf 0 gesetzt.
+ */
+@utility pt-safe-* {
+  padding-top: calc(env(safe-area-inset-top) + --spacing(--value(integer)));
+}

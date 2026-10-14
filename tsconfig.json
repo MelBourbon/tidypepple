@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client", "vitest/globals"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    // scripts/ ist bewusst JavaScript: die Prüfskripte laufen so ohne Build-Schritt
+    // und ohne Flags mit bloßem `node`. Getypt sind sie über JSDoc, und checkJs hält
+    // diese Typen ehrlich.
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src", "tests", "scripts", "deploy", "mcp/src", "mcp/vite.config.ts", "vite.config.ts"]
+}

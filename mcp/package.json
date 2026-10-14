@@ -1,0 +1,30 @@
+{
+  "name": "tidypepple-mcp",
+  "version": "0.1.1",
+  "description": "MCP-Server für TidyPepple: Aufgaben lesen und bearbeiten – Ende-zu-Ende-verschlüsselt, für LLMs und Skripte.",
+  "type": "module",
+  "bin": {
+    "tidypepple-mcp": "dist/server.mjs"
+  },
+  "files": [
+    "dist/server.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gtd",
+    "tidypepple"
+  ],
+  "license": "AGPL-3.0-only",
+  "homepage": "https://tidypepple.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MelBourbon/tidypepple.git",
+    "directory": "mcp"
+  }
+}

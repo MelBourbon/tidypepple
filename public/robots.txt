@@ -1,0 +1,5 @@
+# Die App wird nicht indexiert – das regelt noindex (Meta-Tag in index.html und
+# X-Robots-Tag in deploy/nginx/tidypepple.conf). Crawler müssen die Seiten dafür
+# abrufen dürfen, deshalb hier kein Disallow.
+User-agent: *
+Allow: /

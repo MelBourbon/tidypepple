@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.roeslr.tidypepple",
+      "sha256_cert_fingerprints": [
+        "22:81:C2:5C:09:4A:A0:ED:FE:96:44:94:80:0A:92:DA:C4:49:5B:B7:C9:14:92:61:25:1B:F7:55:39:35:17:C4"
+      ]
+    }
+  }
+]

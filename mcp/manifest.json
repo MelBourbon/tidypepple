@@ -1,0 +1,110 @@
+{
+  "manifest_version": "0.3",
+  "name": "tidypepple",
+  "display_name": "TidyPepple",
+  "version": "0.0.0",
+  "description": "Deine TidyPepple-Aufgaben in Claude: lesen, erfassen, erledigen – Ende-zu-Ende-verschlüsselt.",
+  "long_description": "Verbindet Claude mit deinen TidyPepple-Aufgaben. Die Erweiterung ist ein eigenes Gerät deines Vaults: Sie entschlüsselt auf deinem Rechner, der TidyPepple-Server sieht weiterhin nur Ciphertext. Was Claude abruft, sieht allerdings Anthropic – mit „Nur Tag“ lässt sich die Sicht auf Aufgaben mit einem bestimmten Tag beschränken. Das API-Token gibt es in der App unter Einstellungen → API-Zugriff (Sync-Abo nötig).",
+  "author": {
+    "name": "TidyPepple"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/server.mjs"
+      ],
+      "env": {
+        "TIDYPEPPLE_TOKEN": "${user_config.token}",
+        "TIDYPEPPLE_ONLY_TAG": "${user_config.only_tag}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "list_tasks",
+      "description": "Aufgaben auflisten und filtern"
+    },
+    {
+      "name": "get_task",
+      "description": "Eine Aufgabe mit ihren Schritten"
+    },
+    {
+      "name": "list_projects",
+      "description": "Offene Projekte"
+    },
+    {
+      "name": "list_contexts",
+      "description": "Kontexte"
+    },
+    {
+      "name": "list_tags",
+      "description": "Tags"
+    },
+    {
+      "name": "changes_since",
+      "description": "Änderungen seit einem Cursor (für Sync-Skripte)"
+    },
+    {
+      "name": "add_task",
+      "description": "Aufgabe in Erfassungs-Syntax anlegen"
+    },
+    {
+      "name": "update_task",
+      "description": "Felder einer Aufgabe ändern"
+    },
+    {
+      "name": "complete_task",
+      "description": "Aufgabe erledigen"
+    },
+    {
+      "name": "reopen_task",
+      "description": "Erledigte Aufgabe wieder öffnen"
+    },
+    {
+      "name": "delete_task",
+      "description": "Aufgabe samt Schritten löschen"
+    }
+  ],
+  "keywords": [
+    "gtd",
+    "todo",
+    "aufgaben",
+    "tasks"
+  ],
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MelBourbon/tidypepple"
+  },
+  "homepage": "https://tidypepple.com",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "user_config": {
+    "token": {
+      "type": "string",
+      "title": "API-Token",
+      "description": "Aus der App: Einstellungen → API-Zugriff. Beginnt mit „tp1.“.",
+      "sensitive": true,
+      "required": true
+    },
+    "only_tag": {
+      "type": "string",
+      "title": "Nur Tag (optional)",
+      "description": "Claude sieht und bearbeitet nur Aufgaben mit diesem Tag, z. B. „ai“. Leer: alle Aufgaben.",
+      "required": false,
+      "default": ""
+    }
+  }
+}
