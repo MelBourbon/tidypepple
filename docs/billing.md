@@ -109,7 +109,8 @@ and re-checks the subscription status up to three times, 5 seconds apart
 (`src/billing/checkoutReturn.ts`), because the webhook may arrive a bit later. The same
 happens when you return to the tab manually shortly after clicking “Buy”.
 
-**Android app for direct download** (separate repository, platform `android`): it buys
+**Android app for direct download** (hosted version only, separate non-public repository,
+platform `android`): it buys
 through the same checkout. The wrapper opens it in a Custom Tab, and the redirect to
 `/?checkout=done` brings the app back to the front via App Link. The customer portal is
 linked there as well. Only a future app from Google Play (platform `twa`) sells via Play.
