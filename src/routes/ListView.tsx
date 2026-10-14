@@ -9,7 +9,8 @@ import { META_KEYS } from '@/data/db';
 import { useContexts, useGraph, useSetting, useTags, useTaskList } from '@/data/hooks';
 import type { ListFilter } from '@/domain/listQuery';
 import { tagKey } from '@/domain/tags';
-import { DEFAULT_SORT, groupByContext, groupByStatus, type SortSpec } from '@/domain/sort';
+import { setListOrders } from '@/data/repo';
+import { DEFAULT_SORT, groupByContext, groupByStatus, planReorder, type SortSpec } from '@/domain/sort';
 import type { TaskStatus } from '@/domain/types';
 import { t } from '@/i18n';
 
@@ -192,6 +193,9 @@ export function ListView({ scope }: { scope: keyof typeof SCOPES }): React.React
           graph={graph}
           sections={sections}
           onToggleSection={toggleSection}
+          onReorder={
+            sort.key === 'manual' ? (from, to) => void setListOrders(planReorder(tasks, from, to, sort.dir)) : undefined
+          }
         />
       )}
     </>

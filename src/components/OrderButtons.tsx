@@ -2,7 +2,8 @@ import { t } from '@/i18n';
 
 /**
  * Reihenfolge per Knopf statt Drag: die Listen sind kurz, und Knöpfe sind auf dem Handy
- * und mit Tastatur zuverlässiger. Drag & Drop gibt es dort, wo es zählt – im Board.
+ * und mit Tastatur zuverlässiger. Drag & Drop gibt es dort, wo es zählt – im Board, in den
+ * Aufgabenlisten bei manueller Sortierung und bei den Projekten.
  *
  * `onMove` bekommt die neuen Nachbarn im Format von `moveTask`/`moveContext`.
  */

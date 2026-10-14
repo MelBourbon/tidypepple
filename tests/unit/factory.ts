@@ -12,6 +12,7 @@ export function task(patch: Partial<Task> = {}): Task {
     status: 'next',
     parentId: null,
     order: `a${counter}`,
+    listOrder: null,
     contexts: [],
     tags: [],
     dueDate: null,

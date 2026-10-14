@@ -2,8 +2,11 @@ import { Link } from 'react-router-dom';
 import { DueBadge } from '@/components/DueBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/PageHeader';
+import { DragHandle, SortableItem, SortableList } from '@/components/Sortable';
 import { useGraph, useProjects } from '@/data/hooks';
+import { setListOrders } from '@/data/repo';
 import { isPausedProject, nextSteps, projectProgress } from '@/domain/projects';
+import { planReorder } from '@/domain/sort';
 import type { Task } from '@/domain/types';
 import { t } from '@/i18n';
 
@@ -15,6 +18,8 @@ import { t } from '@/i18n';
  * Oben die aktiven Projekte, darunter die ruhenden (Wartet, Terminiert, Irgendwann), deren
  * Schritte noch nicht in "Next" stehen. Bei ruhenden ist ein fehlender nächster
  * Schritt kein Alarmsignal, sondern ein Projekt, das erst noch geplant wird.
+ *
+ * Die Reihenfolge innerhalb beider Abschnitte legt der Nutzer per Griff fest.
  */
 export function ProjectsView(): React.ReactNode {
   const graph = useGraph();
@@ -49,50 +54,63 @@ function ProjectSection({ title, projects }: { title: string; projects: readonly
         <span className="ml-auto tabular-nums">{projects.length}</span>
       </h2>
       {/* Einzelne Karten mit Abstand statt einer durchgehenden Liste. */}
-      <ul className="flex flex-col gap-2 px-4">
-        {projects.map((project) => {
-          const paused = isPausedProject(graph, project);
-          const progress = projectProgress(graph, project);
-          const steps = nextSteps(graph, project);
-          const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
+      <SortableList
+        ids={projects.map((p) => p.id)}
+        onReorder={(from, to) => void setListOrders(planReorder(projects, from, to))}
+      >
+        <ul className="flex flex-col gap-2 px-4">
+          {projects.map((project) => {
+            const paused = isPausedProject(graph, project);
+            const progress = projectProgress(graph, project);
+            const steps = nextSteps(graph, project);
+            const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
 
-          return (
-            <li key={project.id} className="rounded-card border border-line bg-surface shadow-small">
-              <Link to={`/task/${project.id}`} className="block px-4 py-3">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-heading-16">{project.title}</span>
-                  <span className="flex shrink-0 items-baseline gap-2">
-                    {paused && <span className="text-xs text-muted">{t.status[project.status]}</span>}
-                    <DueBadge due={project.dueDate} time={project.dueTime} />
-                  </span>
-                </div>
+            return (
+              <SortableItem
+                key={project.id}
+                id={project.id}
+                className="group flex items-start rounded-card border border-line bg-surface shadow-small"
+              >
+                <Link to={`/task/${project.id}`} className="block min-w-0 flex-1 py-3 pl-4">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="truncate text-heading-16">{project.title}</span>
+                    <span className="flex shrink-0 items-baseline gap-2">
+                      {paused && <span className="text-xs text-muted">{t.status[project.status]}</span>}
+                      <DueBadge due={project.dueDate} time={project.dueTime} />
+                    </span>
+                  </div>
 
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="h-1 flex-1 overflow-hidden rounded-full bg-raised">
-                    <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
-                  </span>
-                  <span className="shrink-0 text-xs tabular-nums text-muted">
-                    {t.projects.progress(progress.done, progress.total)}
-                  </span>
-                </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="h-1 flex-1 overflow-hidden rounded-full bg-raised">
+                      <span className="block h-full bg-accent" style={{ width: `${percent}%` }} />
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted">
+                      {t.projects.progress(progress.done, progress.total)}
+                    </span>
+                  </div>
 
-                <p className="mt-1.5 truncate text-sm">
-                  {progress.allDone ? (
-                    <span className="text-muted">{t.projects.allDone}</span>
-                  ) : progress.stalled ? (
-                    <span className={paused ? 'text-muted' : 'text-danger'}>{t.projects.stalled}</span>
-                  ) : (
-                    <>
-                      <span className="text-muted">{t.projects.nextStep}: </span>
-                      {steps.map((s) => s.title).join(' · ')}
-                    </>
-                  )}
-                </p>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                  <p className="mt-1.5 truncate text-sm">
+                    {progress.allDone ? (
+                      <span className="text-muted">{t.projects.allDone}</span>
+                    ) : progress.stalled ? (
+                      <span className={paused ? 'text-muted' : 'text-danger'}>{t.projects.stalled}</span>
+                    ) : (
+                      <>
+                        <span className="text-muted">{t.projects.nextStep}: </span>
+                        {steps.map((s) => s.title).join(' · ')}
+                      </>
+                    )}
+                  </p>
+                </Link>
+                {/* Oben neben dem Titel, damit der Griff nicht in die Fortschrittszeile rutscht. */}
+                <span className="pt-1">
+                  <DragHandle label={project.title} />
+                </span>
+              </SortableItem>
+            );
+          })}
+        </ul>
+      </SortableList>
     </section>
   );
 }

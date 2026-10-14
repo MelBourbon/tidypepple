@@ -66,6 +66,7 @@ export const de = {
   order: {
     up: (label: string) => `${label} nach oben`,
     down: (label: string) => `${label} nach unten`,
+    drag: (label: string) => `${label} verschieben`,
   },
 
   task: {

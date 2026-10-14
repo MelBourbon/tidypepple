@@ -61,6 +61,7 @@ export const en: Messages = {
   order: {
     up: (label: string) => `Move ${label} up`,
     down: (label: string) => `Move ${label} down`,
+    drag: (label: string) => `Drag ${label}`,
   },
 
   task: {

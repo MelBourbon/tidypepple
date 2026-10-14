@@ -4,7 +4,7 @@ import { db, getMeta, setMeta } from './db';
 import { allOpenTasks, engageableTasks, type ListFilter } from '@/domain/listQuery';
 import { allProjects, buildGraph, type TaskGraph } from '@/domain/projects';
 import { allTags } from '@/domain/tags';
-import { sortTasks, type SortSpec } from '@/domain/sort';
+import { sortByListOrder, sortTasks, type SortSpec } from '@/domain/sort';
 import { isLive, type Context, type Task } from '@/domain/types';
 
 /**
@@ -60,7 +60,7 @@ export function useTaskList(filter: ListFilter, sort: SortSpec, scope: 'next' | 
 
 export function useProjects(): readonly Task[] {
   const graph = useGraph();
-  return useMemo(() => allProjects(graph), [graph]);
+  return useMemo(() => sortByListOrder(allProjects(graph)), [graph]);
 }
 
 export function useOutboxCount(): number {
