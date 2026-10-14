@@ -34,8 +34,9 @@
   └ title ┘ └context┘ └project┘ └tag┘ └due┘ └start┘ └important┘
   ```
 
-- **Installable PWA** for Android, iOS and desktop, plus an Android wrapper app. German and
-  English UI.
+- **Installable PWA** for Android, iOS and desktop. German and English UI. The hosted version
+  at tidypepple.com also offers an Android app; it is a thin wrapper around the PWA and not
+  part of this repository.
 - **API via MCP.** A local [MCP server](mcp/) lets Claude and other AI assistants or your own
   scripts read and edit tasks. It decrypts on your machine, so the server still sees only
   ciphertext.

@@ -176,7 +176,11 @@ sudo certbot --nginx -d tidypepple.example.com
 
 The file is extensively commented: caching per path, Content Security Policy, HSTS, SPA
 fallback, plus the Digital Asset Links of the Android app and a note on the optional start
-ping (`VITE_BEACON`). Whatever you don't need can go. Why the remaining parts look the way
+ping (`VITE_BEACON`). Whatever you don't need can go.
+
+`public/.well-known/assetlinks.json` belongs to the Android app of the hosted version
+(app.tidypepple.com) and is of no use to your instance. Delete it or replace it with your own;
+without the file, nginx answers with 404, which is harmless. Why the remaining parts look the way
 they do is explained under [The three pitfalls](#5-the-three-pitfalls).
 
 ### 4. Updating

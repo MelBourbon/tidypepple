@@ -2,7 +2,8 @@ import { BRIDGE_NAME } from '.';
 import type { PendingReminder } from '@/domain/reminders';
 
 /**
- * Bridge zur WebView-Hülle (eigenes Repository, `Bridge.kt`).
+ * Bridge zur WebView-Hülle (eigenes, nicht öffentliches Repository, `Bridge.kt`). Die Hülle
+ * gehört zur gehosteten Version; die Schnittstelle ist hier vollständig beschrieben.
  *
  * Die Hülle stellt `window.TidyPeppleAndroid` nur auf https://app.tidypepple.com bereit.
  * Gesprochen wird JSON: `{ id, type, … }` hin, `{ id, ok, result | error }` zurück. Fehlt

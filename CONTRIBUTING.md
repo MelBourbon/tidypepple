@@ -42,6 +42,13 @@ CI runs the same checks on every pull request.
 - Code comments explain *why*, not *what*. Existing comments are in German; either language
   is fine for new ones.
 
+## Versions and releases
+
+Versions are git tags `vX.Y.Z`: minor for new features, patch for fixes. Each tag gets a
+[GitHub release](https://github.com/MelBourbon/tidypepple/releases) with the tag message as
+notes. `package.json` is not maintained; the app shows the output of `git describe --tags`
+(see `vite.config.ts`). The hosted Android app has its own version numbers (2.x).
+
 ## License
 
 By contributing, you agree that your contributions are licensed under the

@@ -66,7 +66,8 @@ attachments stay on the device. They are not included in the JSON backup.
 for due dates. Permission is requested only when the first reminder is set. Delivery depends
 on the platform (`src/components/ReminderScheduler.tsx`):
 
-- **Android app** (2.1.0 and later, bridge 2): on every change, the PWA hands the whole list
+- **Android app** of the hosted version (2.1.0 and later, bridge 2; the wrapper is not public,
+  `src/platform/android.ts` describes the interface): on every change, the PWA hands the whole list
   to the wrapper via `reminder.sync`. The wrapper schedules them with AlarmManager, even with
   the app closed and after a reboot. Reminders that arrive via sync from another device ring
   too.
@@ -101,6 +102,6 @@ submitting – they see it all before it is sent. Both targets are in `src/feedb
 PNG icons from it. The “any” icons (desktop) are transparent; the maskable and Apple touch
 icons use the warm gray `#faf9f7` as background, which Android and iOS round themselves.
 Installed apps only pick up a new icon once Chrome re-reads the manifest (up to about a day,
-or after reinstalling). The Android wrapper has its own copies in `res/mipmap-*`.
+or after reinstalling). The Android wrapper of the hosted version has its own copies.
 
 Keyboard: `c` captures from anywhere, `j`/`k` move the focus in the list, `x` completes.
