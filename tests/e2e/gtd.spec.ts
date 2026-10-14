@@ -837,3 +837,11 @@ test('sortiert Aufgaben und Projekte von Hand per Griff, auch mit der Tastatur',
   await dragWithKeys(page, 'Urlaub verschieben', -1);
   await expect(projects).toHaveText(['Urlaub', 'Renovierung']);
 });
+
+test('zeigt im Detail, wann eine Aufgabe erfasst wurde und wie alt sie ist', async ({ page }) => {
+  await capture(page, 'Alte Sache !heute');
+  // Die Liste bleibt ruhig: kein Erstellungsdatum auf der Karte.
+  await expect(page.getByRole('listitem').filter({ hasText: 'Alte Sache' })).not.toContainText('Erstellt');
+  await page.getByRole('link', { name: 'Alte Sache' }).click();
+  await expect(page.getByText(/^Erstellt am .+ \(heute\)$/)).toBeVisible();
+});

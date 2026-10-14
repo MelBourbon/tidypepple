@@ -105,6 +105,17 @@ export const de = {
     delete: 'Löschen',
     complete: 'Erledigt',
     completedAt: (when: string) => `Erledigt ${when}`,
+    createdAt: (when: string, age: string) => `Erstellt am ${when} (${age})`,
+    age: (days: number) =>
+      days === 0
+        ? 'heute'
+        : days === 1
+          ? 'gestern'
+          : days < 14
+            ? `vor ${days} Tagen`
+            : days < 60
+              ? `vor ${Math.floor(days / 7)} Wochen`
+              : `vor ${Math.floor(days / 30)} Monaten`,
     reopen: 'Wieder öffnen',
     close: 'Schließen',
     titlePlaceholder: 'Titel',

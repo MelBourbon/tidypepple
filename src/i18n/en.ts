@@ -100,6 +100,17 @@ export const en: Messages = {
     delete: 'Delete',
     complete: 'Done',
     completedAt: (when: string) => `Completed ${when}`,
+    createdAt: (when: string, age: string) => `Created ${when} (${age})`,
+    age: (days: number) =>
+      days === 0
+        ? 'today'
+        : days === 1
+          ? 'yesterday'
+          : days < 14
+            ? `${days} days ago`
+            : days < 60
+              ? `${Math.floor(days / 7)} weeks ago`
+              : `${Math.floor(days / 30)} months ago`,
     reopen: 'Reopen',
     close: 'Close',
     titlePlaceholder: 'Title',
