@@ -29,3 +29,27 @@ describe('formatDueLabel', () => {
     expect(formatDueLabel('2026-10-20', labels(en), REF)).toBe('20 Oct');
   });
 });
+
+describe('Alter einer Aufgabe', () => {
+  it('wird in Tagen, Wochen und Monaten genannt', () => {
+    const days = [0, 1, 5, 13, 14, 59, 60];
+    expect(days.map(de.task.age)).toEqual([
+      'heute',
+      'gestern',
+      'vor 5 Tagen',
+      'vor 13 Tagen',
+      'vor 2 Wochen',
+      'vor 8 Wochen',
+      'vor 2 Monaten',
+    ]);
+    expect(days.map(en.task.age)).toEqual([
+      'today',
+      'yesterday',
+      '5 days ago',
+      '13 days ago',
+      '2 weeks ago',
+      '8 weeks ago',
+      '2 months ago',
+    ]);
+  });
+});

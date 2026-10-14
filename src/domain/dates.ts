@@ -49,6 +49,28 @@ export function formatDueLabel(due: IsoDate, labels: DueLabels, ref: IsoDate = t
   return date.toLocaleDateString(labels.dateLocale, { day: 'numeric', month: 'short' });
 }
 
+/**
+ * Ganze Kalendertage seit einem Zeitpunkt, nie negativ. Kalendertage statt 24-h-Blöcken:
+ * gestern Abend ist "1 Tag".
+ */
+export function daysSince(ms: number, ref: IsoDate = today()): number {
+  const [y1, m1, d1] = toIsoDate(new Date(ms)).split('-').map(Number) as [number, number, number];
+  const [y2, m2, d2] = ref.split('-').map(Number) as [number, number, number];
+  // UTC rechnet ohne Sommerzeit-Sprünge; die Daten selbst sind schon lokal.
+  const days = Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+  return Math.max(0, days);
+}
+
+/** Tag ohne Uhrzeit: „3. Okt.", aus anderen Jahren mit Jahr. */
+export function formatDay(ms: number, dateLocale: string, now: Date = new Date()): string {
+  const date = new Date(ms);
+  return date.toLocaleDateString(dateLocale, {
+    day: 'numeric',
+    month: 'short',
+    ...(date.getFullYear() !== now.getFullYear() && { year: 'numeric' }),
+  });
+}
+
 /** Zeitpunkt mit Uhrzeit für kleine Hinweise: „8. Okt., 14:32", aus anderen Jahren mit Jahr. */
 export function formatTimestamp(ms: number, dateLocale: string, now: Date = new Date()): string {
   const date = new Date(ms);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/AttachmentSection';
 import { CompletedStamp } from '@/components/CompletedStamp';
+import { CreatedStamp } from '@/components/CreatedStamp';
 import { OrderButtons } from '@/components/OrderButtons';
 import { PickerChip } from '@/components/PickerChip';
 import { PriorityFlag } from '@/components/PriorityFlag';
@@ -115,7 +116,10 @@ function TaskEditor({ id }: { id: string | undefined }): React.ReactNode {
         />
       </div>
 
-      <CompletedStamp task={task} className="-mt-1 mb-1 block pl-13" />
+      <div className="-mt-1 mb-1 pl-13">
+        <CreatedStamp task={task} className="block" />
+        <CompletedStamp task={task} className="block" />
+      </div>
 
       <AssignmentRow task={task} graph={graph} contexts={contexts} patch={patch} />
 

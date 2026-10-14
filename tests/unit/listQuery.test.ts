@@ -9,6 +9,7 @@ import {
 } from '@/domain/listQuery';
 import { buildGraph } from '@/domain/projects';
 import { waitingDays } from '@/domain/waiting';
+import { daysSince } from '@/domain/dates';
 import { task } from './factory';
 
 const ids = (tasks: readonly { id: string }[]): string[] => tasks.map((t) => t.id).sort();
@@ -259,6 +260,14 @@ describe('doneTasks', () => {
       task({ id: 'fertig', parentId: 'q', status: 'done' }),
     ]);
     expect(ids(bulkDeletable(graph, doneTasks(graph)))).toEqual(['fertig', 'q']);
+  });
+});
+
+describe('daysSince', () => {
+  it('zählt Kalendertage, nicht 24-Stunden-Blöcke', () => {
+    expect(daysSince(new Date(2026, 9, 3, 23, 59).getTime(), '2026-10-04')).toBe(1);
+    expect(daysSince(new Date(2026, 9, 4, 0, 1).getTime(), '2026-10-04')).toBe(0);
+    expect(daysSince(new Date(2026, 9, 9).getTime(), '2026-10-04')).toBe(0);
   });
 });
 
