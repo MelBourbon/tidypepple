@@ -106,6 +106,7 @@ const emptyTask = (id: string, now: number, hlc: string): Task => ({
   status: 'inbox',
   parentId: null,
   order: 'a0',
+  listOrder: null,
   contexts: [],
   tags: [],
   dueDate: null,
@@ -305,6 +306,11 @@ export async function moveTask(
   const order = generateKeyBetween(after?.order ?? null, before?.order ?? null);
 
   await updateTask(id, { parentId, order });
+}
+
+/** Schreibt neue Listenpositionen (siehe `planReorder`); `order` und Projektbezug bleiben. */
+export async function setListOrders(updates: readonly { id: string; listOrder: string }[]): Promise<void> {
+  for (const { id, listOrder } of updates) await updateTask(id, { listOrder });
 }
 
 /**

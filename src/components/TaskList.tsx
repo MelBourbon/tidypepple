@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { DragHandle, SortableItem, SortableList } from './Sortable';
 import { TaskCard } from './TaskCard';
 import { useTaskActions } from './useTaskActions';
 import { isProject, projectProgress, type TaskGraph } from '@/domain/projects';
@@ -30,6 +31,7 @@ export function TaskList({
   sections,
   onToggleSection,
   onDelete,
+  onReorder,
 }: {
   tasks: readonly Task[];
   contexts: readonly Context[];
@@ -38,6 +40,8 @@ export function TaskList({
   sections?: readonly TaskSection[] | undefined;
   onToggleSection?: (key: string) => void;
   onDelete?: (task: Task) => void;
+  /** Macht die Liste per Griff umsortierbar (nur ohne Abschnitte), Indizes wie angezeigt. */
+  onReorder?: ((from: number, to: number) => void) | undefined;
 }): React.ReactNode {
   const { toggle } = useTaskActions();
   const list = useRef<HTMLDivElement>(null);
@@ -84,29 +88,46 @@ export function TaskList({
     }
   };
 
-  const listClass = 'overflow-hidden border-y border-line bg-surface sm:mx-4 sm:rounded-card sm:border-x';
+  // `divide-y` sitzt an der Liste, nicht an der Karte: jede Karte ist das einzige Kind
+  // ihres `<li>`, ein `last:` an der Karte träfe also jede Zeile.
+  const listClass =
+    'divide-y divide-line overflow-hidden border-y border-line bg-surface sm:mx-4 sm:rounded-card sm:border-x';
+
+  const sortable = onReorder !== undefined && sections === undefined;
 
   const rows = (items: readonly Task[]): React.ReactNode =>
     items.map((task) => {
       const parent = task.parentId === null ? undefined : graph.byId.get(task.parentId);
-      return (
-        <li key={task.id}>
-          <TaskCard
-            task={task}
-            contexts={contexts}
-            project={parent !== undefined && isProject(graph, parent) ? parent : undefined}
-            progress={isProject(graph, task) ? projectProgress(graph, task) : undefined}
-            onToggle={(x) => void toggle(x)}
-            onDelete={onDelete}
-          />
-        </li>
+      const card = (
+        <TaskCard
+          task={task}
+          contexts={contexts}
+          project={parent !== undefined && isProject(graph, parent) ? parent : undefined}
+          progress={isProject(graph, task) ? projectProgress(graph, task) : undefined}
+          onToggle={(x) => void toggle(x)}
+          onDelete={onDelete}
+          handle={sortable ? <DragHandle label={task.title} /> : undefined}
+        />
+      );
+      return sortable ? (
+        <SortableItem key={task.id} id={task.id}>
+          {card}
+        </SortableItem>
+      ) : (
+        <li key={task.id}>{card}</li>
       );
     });
 
   return (
     <div ref={list} onKeyDown={onKeyDown} aria-keyshortcuts="j k x">
       {sections === undefined ? (
-        <ul className={listClass}>{rows(tasks)}</ul>
+        sortable ? (
+          <SortableList ids={tasks.map((task) => task.id)} onReorder={onReorder}>
+            <ul className={listClass}>{rows(tasks)}</ul>
+          </SortableList>
+        ) : (
+          <ul className={listClass}>{rows(tasks)}</ul>
+        )
       ) : (
         sections.map((section) => (
           <section key={section.key} aria-label={section.title} className="pb-3">

@@ -41,6 +41,12 @@ export interface Task {
   parentId: string | null;
   /** Fractional Index – manuelle Reihenfolge und Schrittfolge innerhalb eines Projekts. */
   order: string;
+  /**
+   * Fractional Index für die manuelle Sortierung der flachen Listen ("Next", "All", Projekte).
+   * Getrennt von `order`, damit Umsortieren dort nicht die Schrittfolge eines Projekts ändert.
+   * `null`, solange nie von Hand verschoben – solche Aufgaben stehen hinten.
+   */
+  listOrder: string | null;
   contexts: string[];
   /** Freie Schlagworte, Namen ohne `#`. Siehe `tags.ts`. */
   tags: string[];
@@ -128,6 +134,7 @@ export function normalizeTask(value: unknown): Task | null {
     // Eine Aufgabe als eigenes Elternteil hinge sonst unerreichbar im Graphen.
     parentId: parentId === t.id || parentId === '' ? null : parentId,
     order: typeof t.order === 'string' && t.order !== '' ? t.order : 'a0',
+    listOrder: t.listOrder === '' ? null : strOrNull(t.listOrder),
     contexts: Array.isArray(t.contexts) ? t.contexts.filter((c): c is string => typeof c === 'string') : [],
     tags: Array.isArray(t.tags) ? t.tags.filter((tag): tag is string => typeof tag === 'string' && tag !== '') : [],
     dueDate: matchOrNull(t.dueDate, ISO_DATE),

@@ -798,3 +798,42 @@ test('zeigt bei einer unbekannten Adresse eine eigene Seite statt der von React 
   await page.getByRole('link', { name: 'Zur Liste' }).click();
   await expect(page.getByRole('heading', { name: 'Next' })).toBeVisible();
 });
+
+/**
+ * Zieht per Tastatur, wie ein Screenreader-Nutzer: Griff fokussieren, Leertaste, Pfeile,
+ * Leertaste. dnd-kit misst nach jedem Schritt neu – ohne kurze Pause verschluckt es Tasten.
+ */
+const dragWithKeys = async (page: Page, handle: string, steps: number): Promise<void> => {
+  await page.getByRole('button', { name: handle }).focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: handle })).toHaveAttribute('aria-pressed', 'true');
+  await page.waitForTimeout(250);
+  for (let i = 0; i < Math.abs(steps); i += 1) {
+    await page.keyboard.press(steps < 0 ? 'ArrowUp' : 'ArrowDown');
+    await page.waitForTimeout(250);
+  }
+  await page.keyboard.press('Space');
+};
+
+test('sortiert Aufgaben und Projekte von Hand per Griff, auch mit der Tastatur', async ({ page }) => {
+  for (const text of ['Alpha !heute', 'Bravo !heute', 'Charlie !heute']) await capture(page, text);
+  const rows = page.locator('main ul [data-task-row]');
+
+  // Ohne manuelle Sortierung gibt es keinen Griff.
+  await expect(page.getByRole('button', { name: 'Alpha verschieben' })).toHaveCount(0);
+  await page.locator('#sort-key').selectOption('manual');
+  await expect(rows).toHaveText(['Alpha', 'Bravo', 'Charlie']);
+
+  await dragWithKeys(page, 'Charlie verschieben', -2);
+  await expect(rows).toHaveText(['Charlie', 'Alpha', 'Bravo']);
+  await page.reload();
+  await expect(rows).toHaveText(['Charlie', 'Alpha', 'Bravo']);
+
+  await capture(page, 'Streichen +Renovierung');
+  await capture(page, 'Flüge buchen +Urlaub');
+  await go(page, 'Projekte');
+  const projects = page.locator('main ul li .text-heading-16');
+  await expect(projects).toHaveText(['Renovierung', 'Urlaub']);
+  await dragWithKeys(page, 'Urlaub verschieben', -1);
+  await expect(projects).toHaveText(['Urlaub', 'Renovierung']);
+});

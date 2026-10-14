@@ -1,3 +1,4 @@
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { OPEN_STATUSES, type Context, type Task, type TaskStatus } from './types';
 
 export const SORT_KEYS = ['manual', 'due', 'created', 'context', 'status'] as const;
@@ -48,7 +49,8 @@ export function comparator(spec: SortSpec, contexts: readonly Context[] = []): (
   let base: (a: Task, b: Task) => number;
   switch (spec.key) {
     case 'manual':
-      base = signed((a, b) => cmp(a.order, b.order));
+      // Nie verschobene Aufgaben stehen hinten, untereinander wie bisher nach `order`.
+      base = nullsLast(signed((a, b) => cmp(a.listOrder!, b.listOrder!)), (t) => t.listOrder !== null);
       break;
     case 'due':
       // Am selben Tag steht Wichtiges zuerst – unabhängig von Richtung und Uhrzeit. Über
@@ -80,6 +82,48 @@ export function comparator(spec: SortSpec, contexts: readonly Context[] = []): (
 
 export function sortTasks(tasks: readonly Task[], spec: SortSpec, contexts?: readonly Context[]): Task[] {
   return [...tasks].sort(comparator(spec, contexts));
+}
+
+/** Projekte in der Reihenfolge, in die sie von Hand gezogen wurden – neue hinten. */
+export function sortByListOrder(tasks: readonly Task[]): Task[] {
+  return sortTasks(tasks, { key: 'manual', dir: 'asc' });
+}
+
+/**
+ * Welche `listOrder`-Werte ein Verschieben von `from` nach `to` braucht, gemessen an der
+ * angezeigten Liste. Meist nur ein neuer Wert für die verschobene Aufgabe. Fehlen den
+ * Nachbarn Werte (nie verschoben) oder sind sie nicht streng geordnet (gleichzeitige
+ * Änderungen auf zwei Geräten), bekommt die ganze Liste neue Werte in angezeigter Reihenfolge.
+ *
+ * `dir` ist die Sortierrichtung der Anzeige: bei `desc` müssen die Werte nach oben wachsen.
+ */
+export function planReorder(
+  shown: readonly Task[],
+  from: number,
+  to: number,
+  dir: SortSpec['dir'] = 'asc',
+): { id: string; listOrder: string }[] {
+  const moved = shown[from];
+  if (moved === undefined || from === to || to < 0 || to >= shown.length) return [];
+  const next = [...shown];
+  next.splice(from, 1);
+  next.splice(to, 0, moved);
+  const ascending = dir === 'desc' ? next.reverse() : next;
+
+  const index = ascending.indexOf(moved);
+  const below = ascending[index - 1];
+  const above = ascending[index + 1];
+  const keyOf = (t: Task | undefined): string | null | undefined => (t === undefined ? null : (t.listOrder ?? undefined));
+  const low = keyOf(below);
+  const high = keyOf(above);
+  if (low !== undefined && high !== undefined && (low === null || high === null || low < high)) {
+    return [{ id: moved.id, listOrder: generateKeyBetween(low, high) }];
+  }
+
+  const keys = generateNKeysBetween(null, null, ascending.length);
+  return ascending
+    .map((t, i) => ({ id: t.id, listOrder: keys[i]! }))
+    .filter((u, i) => ascending[i]!.listOrder !== u.listOrder);
 }
 
 export interface TaskGroup {

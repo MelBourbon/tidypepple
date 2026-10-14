@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { groupByContext, groupByStatus, sortTasks } from '@/domain/sort';
+import { groupByContext, groupByStatus, planReorder, sortTasks, type SortSpec } from '@/domain/sort';
+import type { Task } from '@/domain/types';
 import { context, task } from './factory';
 
 const ids = (tasks: readonly { id: string }[]): string[] => tasks.map((t) => t.id);
@@ -136,5 +137,64 @@ describe('Status', () => {
     const groups = groupByStatus(sortTasks(more, { key: 'status', dir: 'desc' })).map((g) => [g.status, ids(g.tasks)]);
     expect(groups.map(([status]) => status)).toEqual(['someday', 'waiting', 'scheduled', 'next', 'inbox']);
     expect(groups[3]?.[1]).toHaveLength(2);
+  });
+});
+
+describe('manuelle Sortierung', () => {
+  const manual: SortSpec = { key: 'manual', dir: 'asc' };
+
+  it('folgt listOrder, nie verschobene Aufgaben stehen hinten nach order', () => {
+    const tasks = [
+      task({ id: 'neu2', order: 'a2', listOrder: null }),
+      task({ id: 'b', order: 'a9', listOrder: 'a1' }),
+      task({ id: 'neu1', order: 'a1', listOrder: null }),
+      task({ id: 'a', order: 'a5', listOrder: 'a0' }),
+    ];
+    expect(ids(sortTasks(tasks, manual))).toEqual(['a', 'b', 'neu1', 'neu2']);
+  });
+
+  /** Wendet einen Plan an und sortiert neu – so, wie die Liste nach dem Drop aussieht. */
+  const apply = (shown: readonly Task[], from: number, to: number, spec = manual): string[] => {
+    const plan = new Map(planReorder(shown, from, to, spec.dir).map((u) => [u.id, u.listOrder]));
+    return ids(sortTasks(shown.map((t) => ({ ...t, listOrder: plan.get(t.id) ?? t.listOrder })), spec));
+  };
+
+  it('vergibt beim ersten Verschieben allen angezeigten Aufgaben Werte', () => {
+    const shown = sortTasks([task({ id: 'x' }), task({ id: 'y' }), task({ id: 'z' })], manual);
+    expect(planReorder(shown, 2, 0)).toHaveLength(3);
+    expect(apply(shown, 2, 0)).toEqual(['z', 'x', 'y']);
+  });
+
+  it('ändert danach nur die verschobene Aufgabe', () => {
+    const shown = sortTasks(
+      [task({ id: 'x', listOrder: 'a0' }), task({ id: 'y', listOrder: 'a1' }), task({ id: 'z', listOrder: 'a2' })],
+      manual,
+    );
+    expect(planReorder(shown, 0, 2).map((u) => u.id)).toEqual(['x']);
+    expect(apply(shown, 0, 2)).toEqual(['y', 'z', 'x']);
+    expect(apply(shown, 2, 1)).toEqual(['x', 'z', 'y']);
+  });
+
+  it('vergibt neu, wenn Nachbarn gleiche Werte haben', () => {
+    const shown = sortTasks(
+      [task({ id: 'x', listOrder: 'a0' }), task({ id: 'y', listOrder: 'a1' }), task({ id: 'z', listOrder: 'a1' })],
+      manual,
+    );
+    expect(apply(shown, 0, 1)).toEqual(['y', 'x', 'z']);
+  });
+
+  it('berücksichtigt absteigende Anzeige', () => {
+    const desc: SortSpec = { key: 'manual', dir: 'desc' };
+    const shown = sortTasks(
+      [task({ id: 'x', listOrder: 'a0' }), task({ id: 'y', listOrder: 'a1' }), task({ id: 'z', listOrder: 'a2' })],
+      desc,
+    );
+    expect(ids(shown)).toEqual(['z', 'y', 'x']);
+    expect(apply(shown, 0, 2, desc)).toEqual(['y', 'x', 'z']);
+  });
+
+  it('tut nichts, wenn die Position gleich bleibt', () => {
+    const shown = [task(), task()];
+    expect(planReorder(shown, 1, 1)).toEqual([]);
   });
 });

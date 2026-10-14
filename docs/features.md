@@ -45,6 +45,12 @@ open task, including what is waiting or planned for someday, but not projects th
 by default in collapsible sections by status. Both lists remember sorting and filters
 separately.
 
+**Manual order:** With the sort set to “Manual”, a grip at the end of each row moves tasks
+by drag and drop (mouse, touch, or keyboard: focus the grip, Space, arrow keys, Space). The
+**Projects** view is always ordered this way. The position is stored in its own field,
+`listOrder`, so reordering a list never changes the order of a project's steps (`order`).
+Tasks that were never moved come last.
+
 **Done** (check-mark icon in the header of **All**) shows completed tasks grouped by day.
 There, the check mark reopens a task and the trash can deletes it – one at a time or all at
 once, each with undo instead of a confirmation dialog.

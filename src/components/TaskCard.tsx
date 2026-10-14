@@ -29,6 +29,8 @@ export interface TaskCardProps {
   onToggle: (task: Task) => void;
   /** Blendet einen Löschknopf ein – nur in der Ansicht "Erledigt". */
   onDelete?: ((task: Task) => void) | undefined;
+  /** Griff zum Umsortieren am Ende der Zeile – nur bei manueller Sortierung. */
+  handle?: React.ReactNode;
 }
 
 export function TaskCard({
@@ -39,6 +41,7 @@ export function TaskCard({
   variant = 'row',
   onToggle,
   onDelete,
+  handle,
 }: TaskCardProps): React.ReactNode {
   const done = task.status === 'done';
   const taskContexts = contexts.filter((c) => task.contexts.includes(c.id));
@@ -60,7 +63,7 @@ export function TaskCard({
         // sie beim Scrollen über dem sticky Header, der ebenfalls `z-10` hat.
         'group relative isolate flex items-start gap-1',
         variant === 'row'
-          ? 'border-b border-line bg-surface px-2 last:border-b-0'
+          ? 'bg-surface px-2'
           : 'rounded-card border border-line bg-surface px-1 py-0.5 shadow-small',
       ].join(' ')}
     >
@@ -167,6 +170,7 @@ export function TaskCard({
           </svg>
         </button>
       )}
+      {handle}
     </div>
   );
 }

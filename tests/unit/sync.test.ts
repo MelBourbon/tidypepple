@@ -41,6 +41,7 @@ const fromDeviceB = async (id: string, hlc: string, value: Partial<Task>): Promi
     status: 'next',
     parentId: null,
     order: 'a0',
+    listOrder: null,
     contexts: [],
     tags: [],
     dueDate: null,

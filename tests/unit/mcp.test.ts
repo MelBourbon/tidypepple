@@ -66,6 +66,7 @@ async function fromDeviceB(id: string, millis: number, value: Partial<Task>): Pr
     status: 'next',
     parentId: null,
     order: 'a0',
+    listOrder: null,
     contexts: [],
     tags: [],
     dueDate: null,
