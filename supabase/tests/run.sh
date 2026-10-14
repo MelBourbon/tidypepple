@@ -14,10 +14,15 @@ trap cleanup EXIT
 cleanup
 
 docker run -d --name "$NAME" -e POSTGRES_PASSWORD=test "$IMAGE" >/dev/null
+# Über TCP fragen: Das Image startet beim ersten Mal einen Init-Server nur auf dem Socket
+# und danach neu. Ein Socket-`pg_isready` meldet schon den Init-Server, `psql` landet dann
+# im Neustart.
+ready=false
 for _ in $(seq 1 30); do
-  docker exec "$NAME" pg_isready -U postgres >/dev/null 2>&1 && break
+  if docker exec "$NAME" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done
+$ready || { echo "Postgres ist nach 30 s nicht bereit" >&2; docker logs "$NAME" >&2; exit 1; }
 
 run() { docker exec -i "$NAME" psql -v ON_ERROR_STOP=1 -U postgres -q "$@"; }
 

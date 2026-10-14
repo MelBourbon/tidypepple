@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   KeyboardSensor,
@@ -148,6 +148,9 @@ export function BoardView(): React.ReactNode {
     return map;
   }, [tasks, columns, groupBy, contexts]);
 
+  const boardRef = useRef<HTMLDivElement>(null);
+  useHorizontalWheel(boardRef, tasks.length > 0);
+
   const sensors = useSensors(
     // 8px Toleranz: auf dem Handy soll ein Tap auf die Karte kein Drag auslösen.
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -220,7 +223,7 @@ export function BoardView(): React.ReactNode {
             },
           }}
         >
-          <div className="flex gap-3 overflow-x-auto px-4 pb-4">
+          <div ref={boardRef} className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 pb-4">
             {columns.map((column) => (
               <BoardColumn
                 key={column.key}
@@ -237,6 +240,30 @@ export function BoardView(): React.ReactNode {
   );
 }
 
+/**
+ * Mausrad über dem Board scrollt seitwärts – außer über einer Spalte, die selbst
+ * vertikal scrollen kann. Sonst wäre die horizontale Bewegung nur über Shift+Rad oder die
+ * Scrollleiste erreichbar. Als nativer, nicht-passiver Listener, weil `onWheel` in React
+ * passiv ist und `preventDefault` dort nichts bewirkt.
+ */
+function useHorizontalWheel(ref: React.RefObject<HTMLDivElement | null>, enabled: boolean): void {
+  useEffect(() => {
+    const board = ref.current;
+    if (board === null) return;
+    const onWheel = (event: WheelEvent): void => {
+      if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      if (board.scrollWidth <= board.clientWidth) return;
+      for (let el = event.target as HTMLElement | null; el !== null && el !== board; el = el.parentElement) {
+        if (el.scrollHeight > el.clientHeight) return;
+      }
+      event.preventDefault();
+      board.scrollLeft += event.deltaY;
+    };
+    board.addEventListener('wheel', onWheel, { passive: false });
+    return () => board.removeEventListener('wheel', onWheel);
+  }, [ref, enabled]);
+}
+
 function BoardColumn({
   column,
   tasks,
@@ -251,11 +278,13 @@ function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `col:${column.key}`, disabled: !column.droppable });
 
   return (
+    // Breite: mindestens 16rem, bei freiem Platz bis doppelt so breit. Passen die Spalten
+    // in Mindestbreite nicht nebeneinander, wächst keine – dann scrollt das Board seitwärts.
     <section
       ref={setNodeRef}
       aria-label={column.title}
       className={[
-        'flex w-64 shrink-0 flex-col rounded-card border p-2 transition-colors',
+        'flex max-h-full min-h-0 max-w-128 shrink-0 grow basis-64 flex-col rounded-card border p-2 transition-colors',
         isOver && column.droppable ? 'border-accent-line bg-accent-soft/40' : 'border-line bg-raised/50',
       ].join(' ')}
     >
@@ -264,7 +293,8 @@ function BoardColumn({
         <span className="tabular-nums">{tasks.length}</span>
       </h2>
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <ul className="flex min-h-16 flex-col gap-2">
+        {/* Eigener Scrollbereich je Spalte; -mx-1/px-1 + py-1, damit Fokusring und Schatten nicht abgeschnitten werden. */}
+        <ul className="-mx-1 flex min-h-16 flex-col gap-2 overflow-y-auto px-1 py-1">
           {tasks.map((task) => (
             <BoardCard key={task.id} task={task} contexts={contexts} dimmed={activeId === task.id} />
           ))}
