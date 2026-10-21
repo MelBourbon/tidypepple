@@ -1,15 +1,41 @@
 /*
- * Geist Sans + Geist Mono, selbst gehostet (variabel, nur Latin-Subset: Deutsch und
- * Englisch inkl. Umlaute/ß). Vite bündelt die Dateien, der Service Worker legt sie in den
- * Precache – die App sieht offline und auf jedem Gerät gleich aus, ohne fremden Font-Host.
- * Zeichen außerhalb des Subsets fallen auf system-ui zurück. Siehe docs/styleguide.md § 3.
+ * Geist Sans + Geist Mono, selbst gehostet (nur Latin-Subset: Deutsch und Englisch inkl.
+ * Umlaute/ß). Vite bündelt die Dateien, der Service Worker legt sie in den Precache – die
+ * App sieht offline und auf jedem Gerät gleich aus, ohne fremden Font-Host. Zeichen
+ * außerhalb des Subsets fallen auf system-ui zurück. Siehe docs/styleguide.md § 3.
+ *
+ * Geist Sans als statische Schnitte statt variabel: nur sie sind gehintet (ttfautohint).
+ * Ohne Hinting wirkt 14px-Text auf Monitoren mit 1x-Auflösung – vor allem unter Windows –
+ * unscharf; auf dem Handy fällt das nicht auf. Quelle: npm-Paket `geist` (Vercel, OFL,
+ * siehe fonts/OFL.txt), geschnitten mit
+ *   pyftsubset Geist-<Schnitt>.woff2 --unicodes=<unicode-range unten> --layout-features='*' --flavor=woff2
+ * pyftsubset behält das Hinting. Mehr als 600 nutzt die App nicht; was doch fetter
+ * verlangt (`<strong>`), bekommt 600 statt eines künstlich verdickten Schnitts.
  */
 @font-face {
-  font-family: 'Geist Variable';
+  font-family: 'Geist';
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url('@fontsource-variable/geist/files/geist-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 400;
+  src: url('./fonts/geist-latin-regular.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('./fonts/geist-latin-medium.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 900;
+  src: url('./fonts/geist-latin-semibold.woff2') format('woff2');
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 

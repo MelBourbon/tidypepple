@@ -125,8 +125,10 @@ amber = offline/read only (nothing broken, just paused), red = locked (action ne
 ## 3. Typography
 
 **Fonts:** Geist Sans (`font-sans`) for everything, Geist Mono (`font-mono`) for the recovery
-key. Both self-hosted (`@fontsource-variable/geist*`, Latin subset only, `src/ui/fonts.css`)
-and precached by the service worker – the app looks the same offline.
+key. Both self-hosted (Latin subset only, `src/ui/fonts.css`) and precached by the service
+worker – the app looks the same offline. Geist Sans comes as static, hinted cuts (400 / 500 /
+600) rather than the variable font: without hinting, 14 px text looks blurry on 1x screens,
+especially on Windows.
 
 **Numbers:** wherever numbers change or are stacked (counters, dates, progress, file sizes),
 always use `tabular-nums`.
