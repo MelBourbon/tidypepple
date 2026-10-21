@@ -91,7 +91,7 @@ export function TaskCard({
         </span>
       </button>
 
-      <div className="min-w-0 flex-1 py-2.5 pr-2">
+      <div className="min-w-0 flex-1 py-3 pr-2">
         {/*
           Stretched Link: der Titel ist das Linkziel, sein Pseudo-Element deckt die ganze
           Karte ab. Das gibt eine große Trefferfläche, ohne Links ineinander zu verschachteln
@@ -102,8 +102,10 @@ export function TaskCard({
           data-task-row=""
           data-task-id={task.id}
           className={[
-            // 24px Zeilenhöhe + 10px Innenabstand oben: die erste Zeile steht mittig zum 44px-Knopf.
-            'block text-base leading-6 after:absolute after:inset-0 after:content-[""]',
+            // 20px Zeilenhöhe + 12px Innenabstand oben: die erste Zeile steht mittig zum 44px-Knopf.
+            // Label 14 wie bei Geist, Todoist & Co.: lange Listen bleiben überschaubar, und die
+            // Navigation (ebenfalls 14px) ist nicht kleiner als der Inhalt.
+            'block text-sm leading-5 after:absolute after:inset-0 after:content-[""]',
             done ? 'text-muted line-through' : '',
           ].join(' ')}
         >

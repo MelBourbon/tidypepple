@@ -40,7 +40,8 @@ export function AppShell(): ReactNode {
     if (level !== null) pingStart(level);
   }, [syncState]);
 
-  // Das Board ist die einzige Ansicht, die Breite braucht – Listen lesen sich schmal besser.
+  // Das Board ist die einzige Ansicht, die die volle Breite braucht – Listen bleiben bei
+  // höchstens 896px, sonst wandert das Auge zu weit vom Kreis zum Zeilenende.
   const wide = pathname === '/board';
   // Im Detail liegt unten ein Eingabefeld ("Schritt hinzufügen"); dort würde der
   // schwebende Knopf genau darauf liegen.
@@ -67,7 +68,9 @@ export function AppShell(): ReactNode {
   }, []);
 
   return (
-    <div className={['mx-auto flex min-h-dvh md:gap-6 md:px-4', wide ? 'max-w-none' : 'max-w-4xl'].join(' ')}>
+    // Die Seitenleiste sitzt immer am linken Rand – auch beim Wechsel zum Board springt sie
+    // nicht. Die Listen stehen mittig im übrigen Platz.
+    <div className="flex min-h-dvh md:gap-6 md:px-4">
       <nav aria-label={t.app} className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col gap-1 py-6 md:flex">
         <span className="px-3 pb-4 text-heading-14">{t.app}</span>
         {NAV.map((item) => (
@@ -103,7 +106,13 @@ export function AppShell(): ReactNode {
           Board: genau Viewporthöhe, damit die Spalten selbst scrollen und die horizontale
           Scrollleiste immer sichtbar am unteren Rand liegt. */}
       <main className={['min-w-0 flex-1 pb-28 md:pb-8', wide ? 'flex h-dvh flex-col' : ''].join(' ')}>
-        <Outlet />
+        {wide ? (
+          <Outlet />
+        ) : (
+          <div className="mx-auto max-w-4xl">
+            <Outlet />
+          </div>
+        )}
       </main>
 
       {showFab && (
