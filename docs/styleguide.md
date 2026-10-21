@@ -147,8 +147,7 @@ headings are custom utilities with built-in tracking and weight.
 | Heading 16 | `text-heading-16` | 16 / 24 | −0.02em | 600 | Project title in the project list |
 | Heading 14 | `text-heading-14` | 14 / 20 | −0.01em | 600 | App name, card title, empty state, sections in sync |
 | Label 18 | `text-lg` | 18 / 28 | 0 | 400 | “Quick capture” input field |
-| Label 16 | `text-base` | 16 / 24 | 0 | 400 | Task title in list and board |
-| Label 14 | `text-sm` | 14 / 20 | 0 | 400/500 | Buttons, fields, navigation, menus |
+| Label 14 | `text-sm` | 14 / 20 | 0 | 400/500 | Task title in list and board, buttons, fields, navigation, menus |
 | Label 12 | `text-xs` | 12 / 16 | 0 | 400/500 | Badges, chips, meta, tab bar |
 | Overline | `text-overline` | 12 / 16 | +0.04em | 500 | Section headings (uppercase, `muted`) |
 | Copy 14 | `text-sm` | 14 / 20 | 0 | 400 | Hints, help texts, notes |
@@ -188,9 +187,9 @@ Floating elements **always** have a border as well.
 ## 5. Spacing & layout
 
 - **4 px grid** (Tailwind spacing is 0.25 rem): 4, 8, 12, 16, 24, 32 …
-- Page margin 16 px (`px-4`). Lists at most 896 px wide (`max-w-4xl`); only the board uses
-  the full width.
-- From 768 px on, a sidebar (208 px) instead of the tab bar.
+- Page margin 16 px (`px-4`). Lists at most 896 px wide (`max-w-4xl`), centered in the space
+  next to the sidebar; only the board uses the full width.
+- From 768 px on, a sidebar (208 px) instead of the tab bar, always at the left edge.
 - List rows run edge to edge with a hairline in between; cards (board, projects) sit 8 px
   apart.
 - 8 px between section heading and content, 4 px between label and field.
