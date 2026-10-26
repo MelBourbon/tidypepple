@@ -31,23 +31,54 @@ begin
 end;
 $$;
 
--- Ohne Anmeldung sieht man nichts – und bekommt keinen Fehler, obwohl die Policies eine
--- Funktion aufrufen, die `anon` nicht ausführen darf.
+-- Ohne Anmeldung sieht man nichts. In einem bestehenden Projekt hat `anon` noch Rechte auf
+-- die Tabellen: Dann bleibt die Abfrage leer und ohne Fehler, obwohl die Policies eine
+-- Funktion aufrufen, die `anon` nicht ausführen darf. In einem neuen Projekt fehlt das
+-- Recht, dann wird sie abgewiesen.
 insert into auth.users (id) values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
 insert into public.vaults (id, owner_id, keyring)
   values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', '{}'::jsonb);
 
 do $$
 declare
+  t      text;
   anzahl integer;
 begin
   perform set_config('request.jwt.claims', '{}', true);
-  set local role anon;
-  select count(*) into anzahl from public.vaults;
-  assert anzahl = 0, 'anon darf keine Vaults sehen';
-  select count(*) into anzahl from public.records;
-  assert anzahl = 0, 'anon darf keine Records sehen';
-  reset role;
-  raise notice 'anon: Vaults und Records leer, kein Fehler - bestanden';
+  foreach t in array array['public.vaults', 'public.records'] loop
+    if has_table_privilege('anon', t, 'select') then
+      set local role anon;
+      execute format('select count(*) from %s', t) into anzahl;
+      reset role;
+      assert anzahl = 0, format('anon darf in %s nichts sehen', t);
+    else
+      begin
+        set local role anon;
+        execute format('select count(*) from %s', t) into anzahl;
+        reset role;
+        raise exception 'anon haette % nicht lesen duerfen', t;
+      exception
+        when insufficient_privilege then null;
+      end;
+      reset role;
+    end if;
+  end loop;
+  raise notice 'anon: Vaults und Records leer oder gesperrt - bestanden';
+end;
+$$;
+
+-- Was Geräte brauchen, steht ausdrücklich in den Migrationen und hängt nicht an den
+-- Default-Privilegien des Projekts.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['public.profiles', 'public.vaults', 'public.vault_members', 'public.records', 'public.subscriptions'] loop
+    assert has_table_privilege('authenticated', t, 'select'), format('authenticated muss %s lesen duerfen', t);
+  end loop;
+  assert has_table_privilege('authenticated', 'public.records', 'insert'), 'authenticated muss Records einfuegen duerfen';
+  assert has_table_privilege('authenticated', 'public.records', 'update'), 'authenticated muss Records aendern duerfen';
+  assert has_sequence_privilege('authenticated', 'public.records_seq', 'usage'), 'authenticated muss records_seq nutzen duerfen';
+  raise notice 'authenticated: Tabellenrechte ausdruecklich vergeben - bestanden';
 end;
 $$;

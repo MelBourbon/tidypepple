@@ -36,6 +36,8 @@ CI runs the same checks on every pull request.
 
 - **Database changes** go into a new file in `supabase/migrations/` (`0002_…`, `0003_…`).
   Never edit a migration that has already been released. Add a test in `supabase/tests/`.
+  A new table in `public` needs its `grant`s in the same migration: Supabase no longer
+  grants anything on new tables automatically (see `0003_explicit_grants.sql`).
 - **User-facing strings** belong in `src/i18n/de.ts` (the reference) and `src/i18n/en.ts`.
 - **UI** follows [docs/styleguide.md](docs/styleguide.md). Use rem instead of px for text
   sizes.
