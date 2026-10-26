@@ -43,13 +43,9 @@ end $$;
 
 grant usage on schema public, auth to authenticated, anon;
 
--- Supabase vergibt Rechte über Default-Privilegien: neu angelegte Objekte bekommen sie
--- automatisch. Das muss *vor* den Migrationen stehen, damit ein `revoke` in einer
--- Migration danach auch wirklich wirkt – ein pauschaler Grant hinterher würde es
--- wieder aufheben und den Test wertlos machen.
-alter default privileges in schema public grant all on tables to authenticated, anon;
-alter default privileges in schema public grant all on sequences to authenticated, anon;
-alter default privileges in schema public grant execute on functions to authenticated, anon;
+-- Keine Default-Privilegien: Wie in einem neuen Supabase-Projekt bekommen Objekte in
+-- `public` keine Rechte automatisch, die Migrationen müssen sie selbst vergeben. Wie es in
+-- bestehenden Projekten aussieht, baut `_bestand.sql` nach.
 
 -- Realtime-Publikation, die 0001 erweitert.
 create publication supabase_realtime;
