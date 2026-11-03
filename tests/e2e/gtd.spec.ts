@@ -246,17 +246,17 @@ test('entfernt ein gesetztes Fälligkeitsdatum wieder', async ({ page }) => {
   await expect(page.getByLabel('Fällig am', { exact: true })).toHaveValue('');
 });
 
-test('Fällig und Sichtbar ab nebeneinander, Erinnerung mit Uhrzeit darunter – auch bei 360 px', async ({ page }) => {
+test('Fällig und Zurückgestellt bis nebeneinander, Erinnerung mit Uhrzeit darunter – auch bei 360 px', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await capture(page, 'Zahnarzt anrufen @telefon !heute >heute');
   await page.getByRole('link', { name: 'Zahnarzt anrufen' }).click();
 
   const due = (await page.getByLabel('Fällig am', { exact: true }).boundingBox())!;
-  const defer = (await page.getByLabel('Sichtbar ab', { exact: true }).boundingBox())!;
+  const defer = (await page.getByLabel('Zurückgestellt bis', { exact: true }).boundingBox())!;
   expect(Math.abs(due.y - defer.y)).toBeLessThan(1);
   expect(due.x + due.width).toBeLessThan(defer.x);
   // Beide Entfernen-Knöpfe sind sichtbar und liegen innerhalb des Bildschirms.
-  const clearDefer = (await page.getByRole('button', { name: 'Sichtbar ab entfernen' }).boundingBox())!;
+  const clearDefer = (await page.getByRole('button', { name: 'Zurückgestellt bis entfernen' }).boundingBox())!;
   expect(clearDefer.x + clearDefer.width).toBeLessThanOrEqual(360);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 
@@ -533,7 +533,7 @@ test('zeigt dieselben Aufgaben mit Datum im Board (Needs 4, 5)', async ({ page }
   await go(page, 'Board');
   await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
 
-  const column = page.getByRole('region', { name: 'Nächste Aktion' });
+  const column = page.getByRole('region', { name: 'Next' });
   await expect(column.getByRole('link', { name: 'Board-Karte' })).toBeVisible();
   await expect(column.getByText('Heute', { exact: true })).toBeVisible();
 });
@@ -667,7 +667,7 @@ test('gliedert die Liste nach Status', async ({ page }) => {
 
   await page.getByRole('combobox', { name: 'Sortieren' }).selectOption('status');
   await expect(
-    page.getByRole('region', { name: 'Nächste Aktion' }).getByRole('link', { name: 'Bob anrufen' }),
+    page.getByRole('region', { name: 'Next' }).getByRole('link', { name: 'Bob anrufen' }),
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Terminiert' }).getByRole('link', { name: 'Zahnarzt' })).toBeVisible();
 
@@ -692,7 +692,7 @@ test('zeigt unter "All" alle offenen Aufgaben nach Status', async ({ page }) => 
   await go(page, 'All');
   await expect(page.getByRole('heading', { name: 'All' })).toBeVisible();
   await expect(
-    page.getByRole('region', { name: 'Nächste Aktion' }).getByRole('link', { name: 'Bob anrufen' }),
+    page.getByRole('region', { name: 'Next' }).getByRole('link', { name: 'Bob anrufen' }),
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Irgendwann' }).getByRole('link', { name: 'Segeln lernen' })).toBeVisible();
 
@@ -721,13 +721,13 @@ test('filtert "All" nach mehreren Status, ohne eine weitere Chipzeile', async ({
   await expect(page.getByRole('link', { name: 'Bob anrufen' })).toBeHidden();
 
   // Mehrfachauswahl: ein zweiter Status kommt hinzu.
-  await page.getByRole('checkbox', { name: 'Nächste Aktion' }).click();
+  await page.getByRole('checkbox', { name: 'Next' }).click();
   await expect(page.getByRole('link', { name: 'Bob anrufen' })).toBeVisible();
 
   // Escape schließt das Auswahlfeld, der Chip nennt die Auswahl.
   await page.keyboard.press('Escape');
   await expect(page.getByRole('checkbox', { name: 'Irgendwann' })).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Status: Nächste Aktion, Irgendwann' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Status: Next, Irgendwann' })).toBeVisible();
 
   // Die Auswahl übersteht einen Neustart.
   await page.reload();

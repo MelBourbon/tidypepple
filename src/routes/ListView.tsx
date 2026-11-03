@@ -127,13 +127,14 @@ export function ListView({ scope }: { scope: keyof typeof SCOPES }): React.React
         actions={
           <>
             <SortMenu value={sort} onChange={setSort} />
-            {/* Erledigtes hat keinen Platz in der Bottom-Nav; von "All" ist es ein Schritt. */}
+            {/* Erledigtes hat keinen Platz in der Bottom-Nav; von "All" ist es ein Schritt.
+                Ab Tablet-Breite steht es in der Seitenleiste, dort wäre das Icon doppelt. */}
             {scope === 'all' && (
               <Link
                 to="/done"
                 aria-label={t.nav.done}
                 title={t.nav.done}
-                className="flex size-10 items-center justify-center rounded-md text-muted transition-colors hover:bg-raised hover:text-ink"
+                className="flex size-10 items-center justify-center rounded-md text-muted transition-colors hover:bg-raised hover:text-ink md:hidden"
               >
                 {/* Lucide „circle-check", ISC-Lizenz */}
                 <svg
@@ -178,12 +179,18 @@ export function ListView({ scope }: { scope: keyof typeof SCOPES }): React.React
                   ? t.empty.status
                   : activeTags.length > 0
                     ? t.empty.tag
-                    : empty
+                    : activeContexts.length > 0
+                      ? t.empty.context(activeContexts.length)
+                      : empty
           }
+          // Der Hinweis nennt nur, was gerade wirklich hilft: den Kontextfilter nur, wenn einer
+          // gesetzt ist – sonst schickte er neue Nutzer zu einem Filter, den es nicht gibt.
           hint={
-            search === '' && !highPriorityOnly && (statuses?.length ?? 0) === 0 && activeTags.length === 0
-              ? hint
-              : undefined
+            search !== '' || highPriorityOnly || (statuses?.length ?? 0) > 0 || activeTags.length > 0
+              ? undefined
+              : activeContexts.length > 0
+                ? t.empty.contextHint
+                : hint
           }
         />
       ) : (

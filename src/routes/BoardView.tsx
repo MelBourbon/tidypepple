@@ -206,7 +206,7 @@ export function BoardView(): React.ReactNode {
       />
 
       {tasks.length === 0 ? (
-        <EmptyState title={t.empty.board} hint={t.empty.listHint} />
+        <EmptyState title={t.empty.board} hint={t.empty.boardHint} />
       ) : (
         <DndContext
           sensors={sensors}
