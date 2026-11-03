@@ -41,6 +41,45 @@ test('erfasst eine Aufgabe und zeigt sie in der Liste (Need 1)', async ({ page }
   await expect(page.getByRole('listitem').getByText('@büro')).toBeVisible();
 });
 
+test('klärt die Inbox Aufgabe für Aufgabe, mit Rückgängig', async ({ page }) => {
+  // Den Kontext selbst anlegen, statt sich auf die Standard-Kontexte des ersten Starts zu
+  // verlassen: das Löschen der Datenbank im beforeEach kann deren Anlage unterbrechen.
+  // Die Aufgabe hat einen Kontext und geht deshalb gar nicht erst in die Inbox.
+  await capture(page, 'Ablage @büro');
+  await capture(page, 'Steuer machen');
+  await capture(page, 'Bob wegen Vertrag');
+  await capture(page, 'Werbung abbestellen');
+  await go(page, 'Inbox');
+  await page.getByRole('link', { name: 'Klären' }).click();
+
+  // Die älteste zuerst; „Nächste Aktion“ mit Kontext schickt sie nach Next.
+  const title = page.getByRole('textbox', { name: 'Titel' });
+  await expect(title).toHaveValue('Steuer machen');
+  await page.getByRole('button', { name: /Nächste Aktion/ }).click();
+  await page.getByRole('button', { name: /@büro/ }).click();
+  await page.getByRole('button', { name: 'Übernehmen' }).click();
+
+  await expect(title).toHaveValue('Bob wegen Vertrag');
+  await page.getByRole('button', { name: /Wartet auf/ }).click();
+  await page.getByRole('textbox', { name: 'Auf wen?' }).fill('Bob');
+  await page.getByRole('button', { name: 'Übernehmen' }).click();
+
+  // Rückgängig bringt die Aufgabe zurück – sie ist wieder die nächste.
+  await expect(title).toHaveValue('Werbung abbestellen');
+  await page.getByRole('button', { name: 'Rückgängig' }).last().click();
+  await expect(title).toHaveValue('Bob wegen Vertrag');
+  await page.getByRole('button', { name: /Wartet auf/ }).click();
+  await page.getByRole('button', { name: 'Übernehmen' }).click();
+
+  await expect(title).toHaveValue('Werbung abbestellen');
+  await page.getByRole('button', { name: /Weg damit/ }).click();
+  await expect(page.getByText('Inbox leer.')).toBeVisible();
+  await expect(page.getByText('1× Nach Next')).toBeVisible();
+
+  await go(page, 'Next');
+  await expect(page.getByRole('link', { name: 'Steuer machen' })).toBeVisible();
+});
+
 test('filtert die Liste nach Kontext (Need 2)', async ({ page }) => {
   await capture(page, 'Anruf bei Bob @telefon');
   await capture(page, 'Ablage sortieren @büro');

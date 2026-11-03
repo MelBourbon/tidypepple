@@ -44,8 +44,8 @@ export function AppShell(): ReactNode {
   // höchstens 896px, sonst wandert das Auge zu weit vom Kreis zum Zeilenende.
   const wide = pathname === '/board';
   // Im Detail liegt unten ein Eingabefeld ("Schritt hinzufügen"); dort würde der
-  // schwebende Knopf genau darauf liegen.
-  const showFab = !pathname.startsWith('/task/') && !pathname.startsWith('/projects/');
+  // schwebende Knopf genau darauf liegen. Beim Klären läge er auf den Entscheidungen.
+  const showFab = !pathname.startsWith('/task/') && !pathname.startsWith('/projects/') && pathname !== '/inbox/clarify';
 
   // Tastaturbedienung: "c" erfasst von überall, solange nicht gerade getippt wird.
   useEffect(() => {

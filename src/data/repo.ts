@@ -2,6 +2,7 @@ import { generateKeyBetween } from 'fractional-indexing';
 import { db, META_KEYS, type OutboxEntry } from './db';
 import { formatHlc, isNewer, isValidHlc, merge as mergeHlc, tick, type HlcState } from '@/domain/hlc';
 import { newDeviceId, uuidv7 } from '@/domain/ids';
+import { undoFields } from '@/domain/clarify';
 import { buildGraph, childrenOf, findReusableProject, selfAndDescendantIds, shouldAutoPromote } from '@/domain/projects';
 import { isLive, normalizeContext, normalizeTask, type Attachment, type Context, type Task, type TaskDraft, type TaskStatus } from '@/domain/types';
 
@@ -195,10 +196,12 @@ export async function setStatus(id: string, status: TaskStatus): Promise<void> {
 
 export const completeTask = (id: string): Promise<void> => setStatus(id, 'done');
 
-/** Undo fürs Erledigen: stellt Status, Wartezeit, Fälligkeit und Erinnerung von vorher wieder her. */
+/**
+ * Undo fürs Erledigen: stellt Status, Wartezeit, Fälligkeit und Erinnerung von vorher wieder
+ * her. Dieselben Felder wie beim Klären (`undoFields`) – eine Liste, damit beide Undos gleich viel zurückbringen.
+ */
 export async function undoComplete(before: Task): Promise<void> {
-  const { status, waitingSince, dueDate, dueTime, reminderAt } = before;
-  await updateTask(before.id, { status, waitingSince, dueDate, dueTime, reminderAt, completedAt: null });
+  await updateTask(before.id, { ...undoFields(before), completedAt: null });
 }
 
 /** Erledigen zurücknehmen. Der Status davor ist nicht gespeichert – `next` ist die sichere Annahme. */

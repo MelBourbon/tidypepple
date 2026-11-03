@@ -11,6 +11,7 @@ import { ListView } from './routes/ListView';
 import { ProjectsView } from './routes/ProjectsView';
 import { SettingsView } from './routes/SettingsView';
 import { ShareView } from './routes/ShareView';
+import { ClarifyView } from './routes/ClarifyView';
 import { InboxView } from './routes/StatusView';
 import { TaskDetail } from './routes/TaskDetail';
 import { locale } from './i18n';
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { index: true, element: <ListView key="next" scope="next" /> },
       { path: 'all', element: <ListView key="all" scope="all" /> },
       { path: 'inbox', element: <InboxView /> },
+      { path: 'inbox/clarify', element: <ClarifyView /> },
       { path: 'done', element: <DoneView /> },
       { path: 'share', element: <ShareView /> },
       // Alte Lesezeichen: "Wartet" ist jetzt ein Abschnitt von "All".
