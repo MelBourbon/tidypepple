@@ -1,5 +1,5 @@
 import { addStep, createTask, ensureContexts, ensureProject } from './repo';
-import { parseQuickAdd } from '@/domain/quickAdd';
+import { captureDestination, parseQuickAdd } from '@/domain/quickAdd';
 import type { Task } from '@/domain/types';
 
 export interface CaptureResult {
@@ -23,8 +23,6 @@ export async function captureTask(input: string): Promise<CaptureResult | null> 
   if (parsed.title === '') return null;
 
   const contextIds = await ensureContexts(parsed.contextNames);
-  // Die Priorität allein klärt nichts: wichtig heißt noch nicht, dass klar ist, was zu tun ist.
-  const clarified = contextIds.length > 0 || parsed.dueDate !== null;
   const draft = {
     title: parsed.title,
     contexts: contextIds,
@@ -32,7 +30,7 @@ export async function captureTask(input: string): Promise<CaptureResult | null> 
     dueDate: parsed.dueDate,
     deferDate: parsed.deferDate,
     highPriority: parsed.highPriority,
-    status: clarified ? ('next' as const) : ('inbox' as const),
+    status: captureDestination(parsed) === 'inbox' ? ('inbox' as const) : ('next' as const),
   };
 
   if (parsed.projectName === null) return { task: await createTask(draft), promoted: null };

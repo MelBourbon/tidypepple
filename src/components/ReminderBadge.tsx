@@ -1,4 +1,4 @@
-import { formatDueLabel } from '@/domain/dates';
+import { dueLabel } from './DueBadge';
 import { hasPendingReminder } from '@/domain/reminders';
 import type { Task } from '@/domain/types';
 import { t } from '@/i18n';
@@ -7,7 +7,7 @@ import { t } from '@/i18n';
 export function ReminderBadge({ task }: { task: Task }): React.ReactNode {
   if (task.reminderAt === null || !hasPendingReminder(task, Date.now())) return null;
   const [date = '', time = ''] = task.reminderAt.split('T');
-  const day = formatDueLabel(date, { ...t.due, weekdaysShort: t.weekdaysShort, dateLocale: t.dateLocale });
+  const day = dueLabel(date);
   const label = `${day} ${time}`;
 
   return (

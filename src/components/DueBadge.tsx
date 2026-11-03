@@ -2,6 +2,11 @@ import { dueBucket, formatDueLabel } from '@/domain/dates';
 import type { IsoDate } from '@/domain/types';
 import { t } from '@/i18n';
 
+/** Kurzlabel eines Datums in der Sprache der Oberfläche: „Heute", „Do", „3. Okt". */
+export function dueLabel(date: IsoDate): string {
+  return formatDueLabel(date, { ...t.due, weekdaysShort: t.weekdaysShort, dateLocale: t.dateLocale });
+}
+
 /**
  * Fälligkeit als Badge. Bewusst eine Komponente für Liste *und* Board – so kann keine
  * Ansicht das Datum versehentlich weglassen.
@@ -10,7 +15,7 @@ export function DueBadge({ due, time }: { due: IsoDate | null; time?: string | n
   if (due === null) return null;
   const bucket = dueBucket(due);
   const overdue = bucket === 'overdue';
-  const text = formatDueLabel(due, { ...t.due, weekdaysShort: t.weekdaysShort, dateLocale: t.dateLocale });
+  const text = dueLabel(due);
   const label = overdue ? `${t.due.overdue} · ${text}` : text;
 
   return (
