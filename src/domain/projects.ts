@@ -109,6 +109,19 @@ export function nextStepIds(graph: TaskGraph): ReadonlySet<string> {
   return ids;
 }
 
+/**
+ * Die Aufgabe, die `+Name` beim Erfassen wiederverwendet: lebend, nicht erledigt, Titel
+ * ohne Rücksicht auf Groß-/Kleinschreibung gleich – auch wenn sie noch kein Projekt ist
+ * (sie wird dann zu einem). Eine Regel für das Anlegen und für die „neu“-Markierung.
+ */
+export function findReusableProject(tasks: Iterable<Task>, name: string): Task | undefined {
+  const key = name.toLowerCase();
+  for (const task of tasks) {
+    if (isLive(task) && task.status !== 'done' && task.title.toLowerCase() === key) return task;
+  }
+  return undefined;
+}
+
 export function allProjects(graph: TaskGraph): readonly Task[] {
   return [...graph.byId.values()].filter((t) => isProject(graph, t) && isOpen(t));
 }

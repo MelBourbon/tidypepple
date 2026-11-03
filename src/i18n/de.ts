@@ -39,6 +39,8 @@ export const de = {
     noTitle: 'Noch kein Titel – nur Kürzel erkannt',
     notADate: (token: string) => `„${token}“ ist kein Datum und bleibt im Titel`,
     savedIn: (where: string) => `In ${where}:`,
+    suggestions: 'Vorschläge',
+    isNew: 'neu',
   },
 
   list: {
