@@ -2,7 +2,7 @@ import { generateKeyBetween } from 'fractional-indexing';
 import { db, META_KEYS, type OutboxEntry } from './db';
 import { formatHlc, isNewer, isValidHlc, merge as mergeHlc, tick, type HlcState } from '@/domain/hlc';
 import { newDeviceId, uuidv7 } from '@/domain/ids';
-import { buildGraph, childrenOf, selfAndDescendantIds, shouldAutoPromote } from '@/domain/projects';
+import { buildGraph, childrenOf, findReusableProject, selfAndDescendantIds, shouldAutoPromote } from '@/domain/projects';
 import { isLive, normalizeContext, normalizeTask, type Attachment, type Context, type Task, type TaskDraft, type TaskStatus } from '@/domain/types';
 
 /**
@@ -340,10 +340,7 @@ export async function setParent(id: string, parentId: string | null): Promise<bo
  * Kleinschreibung, und legt es sonst an. Eine gefundene Aufgabe wird dauerhaft zum Projekt.
  */
 export async function ensureProject(name: string): Promise<Task> {
-  const key = name.toLowerCase();
-  const existing = (await db.tasks.toArray()).find(
-    (task) => isLive(task) && task.status !== 'done' && task.title.toLowerCase() === key,
-  );
+  const existing = findReusableProject(await db.tasks.toArray(), name);
   if (existing === undefined) return createTask({ title: name, status: 'next', pinnedAsProject: true });
   if (!existing.pinnedAsProject) await setProjectPinned(existing.id, true);
   return existing;

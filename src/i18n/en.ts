@@ -34,6 +34,8 @@ export const en: Messages = {
     noTitle: 'No title yet – only shortcuts found',
     notADate: (token: string) => `"${token}" is not a date and stays in the title`,
     savedIn: (where: string) => `In ${where}:`,
+    suggestions: 'Suggestions',
+    isNew: 'new',
   },
 
   list: {
