@@ -339,3 +339,60 @@ describe('ensureProject', () => {
     expect(created).toMatchObject({ title: 'Garten', pinnedAsProject: true, status: 'next' });
   });
 });
+
+describe('Inbox klären', () => {
+  const load = async (id: string) => (await db.tasks.get(id))!;
+
+  it('nimmt jede Entscheidung vollständig zurück', async () => {
+    const { applyClarify } = await import('@/data/clarify');
+    const c = await createContext('telefon');
+    const original = await createTask({ title: 'Bob anrufen', status: 'inbox', dueDate: '2026-12-01' });
+
+    for (const decision of [
+      { kind: 'done' },
+      { kind: 'next', contexts: [c.id] },
+      { kind: 'waiting', waitingFor: 'Bob' },
+      { kind: 'later', deferDate: '2026-12-10' },
+      { kind: 'someday' },
+    ] as const) {
+      const undo = await applyClarify(await load(original.id), decision);
+      expect((await load(original.id)).status).not.toBe('inbox');
+      await undo!();
+      expect(await load(original.id)).toMatchObject({
+        status: 'inbox',
+        contexts: [],
+        dueDate: '2026-12-01',
+        deferDate: null,
+        waitingFor: null,
+        waitingSince: null,
+        completedAt: null,
+      });
+    }
+  });
+
+  it('macht ein Projekt mit erstem Schritt daraus – und wieder zurück', async () => {
+    const { applyClarify } = await import('@/data/clarify');
+    const t = await createTask({ title: 'Umzug', status: 'inbox' });
+
+    expect(await applyClarify(t, { kind: 'project', firstStep: '  ' })).toBeNull();
+
+    const undo = await applyClarify(t, { kind: 'project', firstStep: 'Kartons kaufen' });
+    const g = await graph();
+    expect(isProject(g, g.byId.get(t.id)!)).toBe(true);
+    expect(nextSteps(g, g.byId.get(t.id)!).map((s) => s.title)).toEqual(['Kartons kaufen']);
+
+    await undo!();
+    const after = await graph();
+    expect(after.byId.get(t.id)).toMatchObject({ status: 'inbox', pinnedAsProject: false });
+    expect(isProject(after, after.byId.get(t.id)!)).toBe(false);
+  });
+
+  it('löscht und stellt wieder her', async () => {
+    const { applyClarify } = await import('@/data/clarify');
+    const t = await createTask({ title: 'Werbung', status: 'inbox' });
+    const undo = await applyClarify(t, { kind: 'delete' });
+    expect((await load(t.id)).deletedAt).not.toBeNull();
+    await undo!();
+    expect((await load(t.id)).deletedAt).toBeNull();
+  });
+});
