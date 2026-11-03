@@ -21,6 +21,20 @@ const NAV = [
   { to: '/board', label: t.nav.board, icon: 'M2.5 3h3v10h-3zM6.5 3h3v6h-3zM10.5 3h3v8h-3z' },
 ] as const;
 
+/**
+ * Nur in der Seitenleiste: dort ist Platz, und ohne Eintrag fand man „Erledigt“ nur über ein
+ * Icon in „All“. Die Bottom-Nav bleibt bei fünf Zielen, auf dem Handy führt weiter das Icon hin.
+ */
+const SIDEBAR_SECONDARY = [
+  { to: '/done', label: t.nav.done, icon: 'M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0zM5.5 8l1.75 1.75L10.5 6.5' },
+] as const;
+
+const sidebarLinkClass = ({ isActive }: { isActive: boolean }): string =>
+  [
+    'flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors',
+    isActive ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
+  ].join(' ');
+
 function NavIcon({ path }: { path: string }): ReactNode {
   return (
     <svg viewBox="0 0 16 16" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -74,17 +88,14 @@ export function AppShell(): ReactNode {
       <nav aria-label={t.app} className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col gap-1 py-6 md:flex">
         <span className="px-3 pb-4 text-heading-14">{t.app}</span>
         {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              [
-                'flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors',
-                isActive ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
-              ].join(' ')
-            }
-          >
+          <NavLink key={item.to} to={item.to} end={item.to === '/'} className={sidebarLinkClass}>
+            <NavIcon path={item.icon} />
+            {item.label}
+          </NavLink>
+        ))}
+        <div className="my-2 border-t border-line" aria-hidden="true" />
+        {SIDEBAR_SECONDARY.map((item) => (
+          <NavLink key={item.to} to={item.to} className={sidebarLinkClass}>
             <NavIcon path={item.icon} />
             {item.label}
           </NavLink>
