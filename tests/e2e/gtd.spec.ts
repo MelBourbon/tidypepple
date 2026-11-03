@@ -42,6 +42,10 @@ test('erfasst eine Aufgabe und zeigt sie in der Liste (Need 1)', async ({ page }
 });
 
 test('klärt die Inbox Aufgabe für Aufgabe, mit Rückgängig', async ({ page }) => {
+  // Den Kontext selbst anlegen, statt sich auf die Standard-Kontexte des ersten Starts zu
+  // verlassen: das Löschen der Datenbank im beforeEach kann deren Anlage unterbrechen.
+  // Die Aufgabe hat einen Kontext und geht deshalb gar nicht erst in die Inbox.
+  await capture(page, 'Ablage @büro');
   await capture(page, 'Steuer machen');
   await capture(page, 'Bob wegen Vertrag');
   await capture(page, 'Werbung abbestellen');
