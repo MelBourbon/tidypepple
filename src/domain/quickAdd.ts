@@ -21,6 +21,24 @@ export interface QuickAddResult {
   dueDate: IsoDate | null;
   deferDate: IsoDate | null;
   highPriority: boolean;
+  /**
+   * `!…`- und `>…`-Tokens, die wie ein Datum gemeint waren, aber keins sind. Sie bleiben im
+   * Titel – die Erfassung soll nie scheitern –, die Vorschau weist aber auf sie hin.
+   */
+  unrecognized: readonly string[];
+}
+
+/** Wohin eine Erfassung geht: Inbox, Next oder als Schritt in ein Projekt. */
+export type CaptureDestination = 'inbox' | 'next' | 'project';
+
+/**
+ * Wer beim Erfassen schon Kontext oder Datum angibt, hat die Aufgabe geklärt – sie geht
+ * direkt in Next. Die Priorität allein klärt nichts: wichtig heißt noch nicht, dass klar
+ * ist, was zu tun ist. Eine Quelle für die Erfassung selbst und für ihre Vorschau.
+ */
+export function captureDestination(parsed: QuickAddResult): CaptureDestination {
+  if (parsed.projectName !== null) return 'project';
+  return parsed.contextNames.length > 0 || parsed.dueDate !== null ? 'next' : 'inbox';
 }
 
 // Deutsch und Englisch gelten immer, unabhängig von der Sprache der Oberfläche: Die Kürzel
@@ -42,7 +60,12 @@ function nextWeekday(target: number, ref: IsoDate): IsoDate {
   return addDays(ref, delta);
 }
 
-/** `heute`/`today`, `morgen`/`tomorrow`, `mo`/`mon`, `2026-10-01`, `1.10.`, `1.10.2026` – sonst `null`. */
+function isValidDate(year: number, month: number, day: number): boolean {
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+/** `heute`/`today`, `morgen`/`tomorrow`, `mo`/`mon`, `2026-10-01`, `1.10.`, `1.10`, `1.10.2026` – sonst `null`. */
 export function parseDateToken(token: string, ref: IsoDate = today()): IsoDate | null {
   const raw = token.trim().toLowerCase();
   if (raw === '') return null;
@@ -60,19 +83,28 @@ export function parseDateToken(token: string, ref: IsoDate = today()): IsoDate |
   if (plus) return addDays(ref, Number(plus[1]));
 
   // ISO: 2026-10-01
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (iso) return isValidDate(Number(iso[1]), Number(iso[2]), Number(iso[3])) ? raw : null;
 
-  // Deutsch: 1.10. / 01.10.2026
-  const german = /^(\d{1,2})\.(\d{1,2})\.(\d{4})?$/.exec(raw);
+  // Deutsch: 1.10. / 1.10 / 01.10.2026 – der Schlusspunkt wird gern vergessen.
+  const german = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{4})?)?$/.exec(raw);
   if (german) {
     const day = Number(german[1]);
     const month = Number(german[2]);
+    // Kein stilles Überlaufen: "31.2." wäre sonst der 3. März.
+    if (german[3] !== undefined) {
+      const year = Number(german[3]);
+      return isValidDate(year, month, day) ? toIsoDate(new Date(year, month - 1, day)) : null;
+    }
+    // Ohne Jahresangabe das nächste Vorkommen ab heute. Für den 29.2. kann das bis zu acht
+    // Jahre entfernt sein (1900 und 2100 sind keine Schaltjahre), sonst höchstens eins.
     const refYear = Number(ref.slice(0, 4));
-    const year = german[3] !== undefined ? Number(german[3]) : refYear;
-    const candidate = toIsoDate(new Date(year, month - 1, day));
-    // Ohne Jahresangabe ein Datum in der Vergangenheit auf das nächste Jahr schieben.
-    if (german[3] === undefined && candidate < ref) return toIsoDate(new Date(year + 1, month - 1, day));
-    return candidate;
+    for (let year = refYear; year <= refYear + 8; year++) {
+      if (!isValidDate(year, month, day)) continue;
+      const candidate = toIsoDate(new Date(year, month - 1, day));
+      if (candidate >= ref) return candidate;
+    }
+    return null;
   }
 
   return null;
@@ -86,6 +118,7 @@ export function parseQuickAdd(input: string, ref: IsoDate = today()): QuickAddRe
   let dueDate: IsoDate | null = null;
   let deferDate: IsoDate | null = null;
   let highPriority = false;
+  const unrecognized: string[] = [];
 
   for (const token of input.split(/\s+/)) {
     if (token === '') continue;
@@ -125,8 +158,11 @@ export function parseQuickAdd(input: string, ref: IsoDate = today()): QuickAddRe
         continue;
       }
     }
+    // Nur was wie ein Datumsversuch aussieht: ein Wort ("!freitags") oder Ziffern mit Punkt
+    // bzw. Strich ("!32.1."). "!?", ">>" und Vergleiche wie ">5" bleiben unkommentiert.
+    if ((marker === '!' || marker === '>') && /^(?:\p{L}|\d+[.-]\d)/u.test(value)) unrecognized.push(token);
     titleParts.push(token);
   }
 
-  return { title: titleParts.join(' ').trim(), contextNames, projectName, tagNames, dueDate, deferDate, highPriority };
+  return { title: titleParts.join(' ').trim(), contextNames, projectName, tagNames, dueDate, deferDate, highPriority, unrecognized };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDateToken, parseQuickAdd } from '@/domain/quickAdd';
+import { captureDestination, parseDateToken, parseQuickAdd } from '@/domain/quickAdd';
 
 const REF = '2026-09-27'; // ein Sonntag
 
@@ -36,6 +36,25 @@ describe('parseDateToken', () => {
     expect(parseDateToken('sun', REF)).toBe('2026-10-04');
   });
 
+  it('versteht ein deutsches Datum auch ohne Schlusspunkt', () => {
+    expect(parseDateToken('1.10', REF)).toBe('2026-10-01');
+    expect(parseDateToken('24.12', REF)).toBe('2026-12-24');
+    expect(parseDateToken('1.9', REF)).toBe('2027-09-01');
+  });
+
+  it('lässt unmögliche Daten nicht in den Folgemonat überlaufen', () => {
+    expect(parseDateToken('31.2.', REF)).toBeNull();
+    expect(parseDateToken('1.13', REF)).toBeNull();
+    expect(parseDateToken('2026-02-30', REF)).toBeNull();
+    expect(parseDateToken('29.2.2028', REF)).toBe('2028-02-29');
+  });
+
+  it('findet für den 29.2. ohne Jahr das nächste Schaltjahr', () => {
+    expect(parseDateToken('29.2.', '2027-03-01')).toBe('2028-02-29');
+    expect(parseDateToken('29.2.', '2028-03-01')).toBe('2032-02-29');
+    expect(parseDateToken('29.2.', '2028-02-01')).toBe('2028-02-29');
+  });
+
   it('lehnt alles andere ab', () => {
     expect(parseDateToken('bald', REF)).toBeNull();
     expect(parseDateToken('', REF)).toBeNull();
@@ -59,10 +78,25 @@ describe('parseQuickAdd', () => {
     expect(r.contextNames).toEqual([]);
   });
 
-  it('behält unverständliche Datumsangaben im Titel', () => {
-    const r = parseQuickAdd('Sache erledigen !irgendwann', REF);
-    expect(r.title).toBe('Sache erledigen !irgendwann');
+  it('behält unverständliche Datumsangaben im Titel und meldet sie', () => {
+    const r = parseQuickAdd('Sache erledigen !irgendwann >bald', REF);
+    expect(r.title).toBe('Sache erledigen !irgendwann >bald');
     expect(r.dueDate).toBeNull();
+    expect(r.unrecognized).toEqual(['!irgendwann', '>bald']);
+  });
+
+  it('hält Satzzeichen nicht für ein verunglücktes Datum', () => {
+    expect(parseQuickAdd('Wirklich !? Herd aus !! a >> b', REF).unrecognized).toEqual([]);
+    expect(parseQuickAdd('Temperatur >5 Grad !+ prüfen', REF).unrecognized).toEqual([]);
+    expect(parseQuickAdd('Termin !32.1.', REF).unrecognized).toEqual(['!32.1.']);
+  });
+
+  it('nennt das Ziel der Erfassung', () => {
+    expect(captureDestination(parseQuickAdd('Einfach ein Gedanke !!', REF))).toBe('inbox');
+    expect(captureDestination(parseQuickAdd('Bob anrufen @telefon', REF))).toBe('next');
+    expect(captureDestination(parseQuickAdd('Steuer !fr', REF))).toBe('next');
+    expect(captureDestination(parseQuickAdd('Steuer >fr', REF))).toBe('inbox');
+    expect(captureDestination(parseQuickAdd('Kisten +Umzug', REF))).toBe('project');
   });
 
   it('ersetzt Unterstriche im Projektnamen durch Leerzeichen', () => {

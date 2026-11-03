@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTaskActions } from './useTaskActions';
-import type { Task } from '@/domain/types';
+import { dueLabel } from './DueBadge';
+import { today } from '@/domain/dates';
+import { captureDestination, parseQuickAdd, type QuickAddResult } from '@/domain/quickAdd';
+import type { IsoDate, Task } from '@/domain/types';
 import { t } from '@/i18n';
 
 /**
@@ -11,11 +14,17 @@ import { t } from '@/i18n';
  *
  * Wer der eben erfassten Aufgabe doch gleich eine Notiz geben will, kommt über den Link in
  * der Fußzeile oder mit Strg/⌘+Enter direkt ins Detail – Enter bleibt Enter.
+ *
+ * Die Syntax ist unsichtbar, solange niemand zeigt, was sie erkannt hat: Die Vorschau unter
+ * dem Feld nennt Ziel, Datum und Kürzel, bevor gespeichert wird, und warnt vor Tokens, die
+ * wie ein Datum aussehen, aber keins sind. Die Bestätigung sagt, wohin die Aufgabe ging –
+ * mit Kontext oder Datum landet sie in Next statt in der Inbox.
  */
 export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => void }): React.ReactNode {
   const [value, setValue] = useState('');
-  /** Zuletzt erfasste Aufgabe, bei `+Projekt` der Schritt. */
-  const [last, setLast] = useState<Task | null>(null);
+  /** Zuletzt erfasste Aufgabe (bei `+Projekt` der Schritt) und wohin sie ging. */
+  const [last, setLast] = useState<{ task: Task; where: string } | null>(null);
+  const parsed = useMemo(() => parseQuickAdd(value), [value]);
   const input = useRef<HTMLInputElement>(null);
   const { capture } = useTaskActions();
   const navigate = useNavigate();
@@ -31,12 +40,13 @@ export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => 
 
   const save = async (): Promise<Task | null> => {
     const submitted = value;
+    const where = destinationLabel(parsed);
     const created = await capture(submitted);
     if (created === null) return null;
     // Nur leeren, was gespeichert wurde: wer während des Speicherns schon die nächste
     // Aufgabe tippt, verlöre sie sonst.
     setValue((current) => (current === submitted ? '' : current));
-    setLast(created);
+    setLast({ task: created, where });
     return created;
   };
 
@@ -52,7 +62,7 @@ export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => 
 
   /** Strg/⌘+Enter: speichern und öffnen; bei leerem Feld die zuletzt erfasste Aufgabe öffnen. */
   const saveAndOpen = async (): Promise<void> => {
-    const target = value.trim() === '' ? last : await save();
+    const target = value.trim() === '' ? (last?.task ?? null) : await save();
     if (target !== null) openTask(target);
   };
 
@@ -83,25 +93,30 @@ export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => 
             }}
             placeholder={t.capture.placeholder}
             aria-label={t.capture.placeholder}
+            aria-describedby={value.trim() === '' ? undefined : 'capture-preview'}
             className="w-full bg-transparent px-1 py-2 text-lg outline-none placeholder:text-subtle"
           />
+          {value.trim() !== '' && <CapturePreview id="capture-preview" parsed={parsed} />}
           <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2">
             <div className="min-w-0 text-xs text-muted" aria-live="polite">
               {last === null ? (
-                <span>{t.capture.hint}</span>
+                value.trim() === '' && <span>{t.capture.hint}</span>
               ) : (
                 <>
-                  <span className="sr-only">{t.capture.saved(last.title)}</span>
+                  <span className="sr-only">
+                    {t.capture.saved(last.task.title, last.where)}
+                  </span>
                   <Link
-                    to={`/task/${last.id}`}
+                    to={`/task/${last.task.id}`}
                     onClick={onClose}
                     title={t.capture.editShortcut}
-                    aria-label={t.capture.edit(last.title)}
+                    aria-label={t.capture.edit(last.task.title)}
                     className="-my-2 flex min-h-11 items-center gap-1 text-accent hover:underline"
                   >
                     {/* Nur der Titel wird gekürzt – was der Link tut, bleibt immer lesbar. */}
                     <span aria-hidden="true">✓</span>
-                    <span className="truncate">„{last.title}“</span>
+                    <span className="shrink-0 whitespace-nowrap text-muted">{t.capture.savedIn(last.where)}</span>
+                    <span className="truncate">„{last.task.title}“</span>
                     <span className="shrink-0 whitespace-nowrap">{t.capture.editAction} ›</span>
                   </Link>
                 </>
@@ -113,7 +128,7 @@ export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => 
               </button>
               <button
                 type="submit"
-                disabled={value.trim() === ''}
+                disabled={parsed.title === ''}
                 className="h-8 rounded-md bg-accent px-3 text-sm font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {t.capture.submit}
@@ -122,6 +137,64 @@ export function QuickCapture({ open, onClose }: { open: boolean; onClose: () => 
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function destinationLabel(parsed: QuickAddResult): string {
+  const destination = captureDestination(parsed);
+  if (destination === 'project') return t.capture.toProject(parsed.projectName ?? '');
+  return destination === 'inbox' ? t.nav.inbox : t.nav.list;
+}
+
+/**
+ * Wie im Badge, aber mit Jahr, sobald es nicht das laufende ist: `!1.9` kurz nach dem
+ * 1. September ist ein Jahr entfernt, `!2025-10-01` längst vorbei – beides soll man sehen.
+ */
+function dateLabel(date: IsoDate): string {
+  const label = dueLabel(date);
+  return date.slice(0, 4) === today().slice(0, 4) ? label : `${label} ${date.slice(0, 4)}`;
+}
+
+// Form ohne Farbe – Farben setzt jeder Chip selbst, sonst entschiede die Reihenfolge im
+// generierten CSS, welche von zwei widersprüchlichen Klassen gewinnt.
+const CHIP = 'inline-flex max-w-full items-center rounded-full px-2 py-0.5 text-xs';
+const NEUTRAL = `${CHIP} bg-raised text-muted`;
+
+/** Was beim Speichern entstünde – Ziel zuerst, weil es die häufigste Überraschung ist. */
+function CapturePreview({ id, parsed }: { id: string; parsed: QuickAddResult }): React.ReactNode {
+  return (
+    <div id={id} className="mt-1 flex flex-col gap-1.5 px-1 pb-1">
+      {parsed.title === '' ? (
+        <p className="text-xs text-danger">{t.capture.noTitle}</p>
+      ) : (
+        <ul aria-label={t.capture.preview} className="flex flex-wrap items-center gap-1.5">
+          <li className={`${CHIP} bg-accent-soft font-medium text-accent`}>
+            <span aria-hidden="true" className="mr-1">→</span>
+            <span className="truncate">{destinationLabel(parsed)}</span>
+          </li>
+          {parsed.highPriority && <li className={`${CHIP} bg-raised text-danger`}>{t.capture.important}</li>}
+          {parsed.dueDate !== null && <li className={`${NEUTRAL} tabular-nums`}>{t.capture.due(dateLabel(parsed.dueDate))}</li>}
+          {parsed.deferDate !== null && (
+            <li className={`${NEUTRAL} tabular-nums`}>{t.capture.defer(dateLabel(parsed.deferDate))}</li>
+          )}
+          {parsed.contextNames.map((name) => (
+            <li key={`@${name}`} className={NEUTRAL}>
+              <span className="truncate">@{name}</span>
+            </li>
+          ))}
+          {parsed.tagNames.map((name) => (
+            <li key={`#${name}`} className={NEUTRAL}>
+              <span className="truncate">#{name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {parsed.unrecognized.map((token, index) => (
+        <p key={`${index}-${token}`} className="text-xs text-danger">
+          {t.capture.notADate(token)}
+        </p>
+      ))}
     </div>
   );
 }
