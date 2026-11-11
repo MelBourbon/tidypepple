@@ -1,9 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BlobAdapter, BlobUploadStatus, PullPage, RemoteRecord, SyncAdapter } from './adapter';
-import type { Keyring } from '@/crypto/keyring';
+import type { BlobAdapter, BlobUploadStatus, PullPage, ReencryptedRecord, RemoteRecord, SyncAdapter } from './adapter';
+import type { Keyring, RotatedVault } from '@/crypto/keyring';
 import {
   ENTITLEMENT_REQUIRED_CODE,
   EntitlementRequiredError,
+  KEY_OUTDATED_CODE,
+  KeyOutdatedError,
   RECORD_QUOTA_CODE,
   RecordQuotaError,
   VAULT_FORBIDDEN_CODE,
@@ -85,6 +87,32 @@ export async function updateKeyring(client: SupabaseClient, keyring: Keyring): P
   if (error !== null) throw new Error(`Passphrase konnte nicht geändert werden: ${error.message}`);
 }
 
+/**
+ * Nachweis eintragen, dass dieses Gerät den Vault-Key hat – nur, wenn der Server noch keinen
+ * kennt (Vaults von vor 0007). Ohne Nachweis dürfte bei der ersten Rotation jede Sitzung rotieren.
+ */
+export async function registerKeyCheck(client: SupabaseClient, keyring: Keyring, proof: string): Promise<void> {
+  const { error } = await client.rpc('register_key_check', {
+    p_vault_id: keyring.vaultId,
+    p_key_version: keyring.keyVersion,
+    p_proof: proof,
+  });
+  if (error !== null && error.code !== FUNCTION_MISSING_CODE) throw new Error(error.message);
+}
+
+/** Neuen Vault-Key beim Server hinterlegen (`rotate_vault_key`); widerruft alle API-Tokens. */
+export async function rotateVaultKey(client: SupabaseClient, rotated: RotatedVault): Promise<void> {
+  const { error } = await client.rpc('rotate_vault_key', {
+    p_vault_id: rotated.keyring.vaultId,
+    p_proof: rotated.oldProof,
+    p_keyring: rotated.keyring,
+    p_new_proof: rotated.newProof,
+  });
+  if (error === null) return;
+  if (error.code === ENTITLEMENT_REQUIRED_CODE) throw new EntitlementRequiredError(error.message);
+  throw new Error(`Schlüssel konnte nicht erneuert werden: ${error.message}`);
+}
+
 export class SupabaseSyncAdapter implements SyncAdapter {
   constructor(
     private readonly client: SupabaseClient,
@@ -104,6 +132,7 @@ export class SupabaseSyncAdapter implements SyncAdapter {
     if (error.code === ENTITLEMENT_REQUIRED_CODE) throw new EntitlementRequiredError(error.message);
     if (error.code === VAULT_FORBIDDEN_CODE) throw new VaultForbiddenError(error.message);
     if (error.code === RECORD_QUOTA_CODE) throw new RecordQuotaError(error.message);
+    if (error.code === KEY_OUTDATED_CODE) throw new KeyOutdatedError(error.message);
     throw new Error(`Push fehlgeschlagen: ${error.message}`);
   }
 
@@ -132,6 +161,16 @@ export class SupabaseSyncAdapter implements SyncAdapter {
     // Migration noch nicht eingespielt ist.
     if (error.code === FUNCTION_MISSING_CODE) return null;
     throw new Error(`Server-Epoche nicht abrufbar: ${error.message}`);
+  }
+
+  async reencrypt(records: readonly ReencryptedRecord[]): Promise<number> {
+    if (records.length === 0) return 0;
+    const { data, error } = await this.client.rpc('reencrypt_records', {
+      p_vault_id: this.vaultId,
+      p_records: records.map(({ id, hlc, iv, ct, keyVersion }) => ({ id, hlc, iv, ct, keyVersion })),
+    });
+    if (error !== null) throw new Error(`Umschlüsseln fehlgeschlagen: ${error.message}`);
+    return data as number;
   }
 
   subscribe(onChange: () => void): () => void {
@@ -200,6 +239,13 @@ export class SupabaseBlobAdapter implements BlobAdapter {
       throw new Error(`Anhang konnte nicht geladen werden: ${error.message}`);
     }
     return new Uint8Array(await data.arrayBuffer());
+  }
+
+  async replace(path: string, data: Uint8Array<ArrayBuffer>): Promise<void> {
+    const { error } = await this.client.storage
+      .from(BUCKET)
+      .upload(this.full(path), new Blob([data]), { contentType: 'application/octet-stream', upsert: true });
+    if (error !== null) throw new Error(`Anhang konnte nicht ersetzt werden: ${error.message}`);
   }
 
   async remove(paths: readonly string[]): Promise<void> {

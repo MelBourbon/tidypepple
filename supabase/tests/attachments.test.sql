@@ -45,10 +45,19 @@ begin
   select count(*) into gesehen from storage.objects where bucket_id = 'attachments';
   assert gesehen = 1, 'Eigenes Objekt muss lesbar sein';
 
-  -- Ersetzen ist nicht vorgesehen.
-  update storage.objects set metadata = '{"size": 1}' where name = vault || '/task1/att1';
+  -- Ersetzen geht seit der Rotation (0007): Die Datei wird mit dem neuen Schlüssel neu
+  -- verschlüsselt, ohne zwischendurch zu fehlen.
+  update storage.objects set metadata = '{"size": 1000}' where name = vault || '/task1/att1';
   get diagnostics gesehen = row_count;
-  assert gesehen = 0, 'Anhaenge duerfen nicht ueberschrieben werden';
+  assert gesehen = 1, 'Ein Mitglied mit Abo darf einen Anhang ersetzen';
+
+  -- Aber nicht in einen Vault schieben, dem man nicht angehört.
+  begin
+    update storage.objects set name = 'a9999999-9999-4999-8999-999999999999/task1/att1'
+    where name = vault || '/task1/att1';
+    raise exception 'Verschieben in einen fremden Vault haette scheitern muessen';
+  exception when insufficient_privilege then null;
+  end;
 
   begin
     insert into storage.objects (bucket_id, name) values ('attachments', vault || '/zu-kurz');

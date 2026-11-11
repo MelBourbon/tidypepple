@@ -109,6 +109,9 @@ export const META_KEYS = {
   // nur für ihn (`bindVault` in repo.ts).
   syncVaultId: 'syncVaultId',
   lastSyncAt: 'lastSyncAt',
+  // Schlüsselversion, auf die nach einer Rotation noch umgeschlüsselt werden muss
+  // (`rotate` in crypto/vault.ts, `reencryptAll` in sync/engine.ts).
+  reencryptPending: 'reencryptPending',
   sort: 'sort',
   contextFilter: 'contextFilter',
   tagFilter: 'tagFilter',

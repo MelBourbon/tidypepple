@@ -9,13 +9,15 @@ import {
   hasSupabaseConfig,
   SupabaseBlobAdapter,
   SupabaseSyncAdapter,
+  registerKeyCheck,
+  rotateVaultKey,
   updateKeyring,
 } from './supabase';
 import type { Attachment } from '@/domain/types';
 import { t } from '@/i18n';
 import { setMeta } from '@/data/db';
 import { bindVault } from '@/data/repo';
-import { RecordQuotaError, VaultSwitchError } from './errors';
+import { KeyOutdatedError, RecordQuotaError, VaultSwitchError } from './errors';
 import type { ApiTokenScope } from '@/crypto/apiToken';
 import type { Keyring } from '@/crypto/keyring';
 import * as vault from '@/crypto/vault';
@@ -82,6 +84,13 @@ interface SyncContextValue {
   lock: () => void;
   /** Nur entsperrt und angemeldet: der Server hält den Schlüsselbund für die anderen Geräte. */
   changePassphrase: (oldPassphrase: string, newPassphrase: string) => Promise<void>;
+  /**
+   * Neuer Vault-Key (siehe 0007_key_rotation.sql). Widerruft alle API-Tokens, andere Geräte
+   * fragen danach nach der Passphrase. Liefert den neuen Wiederherstellungsschlüssel.
+   */
+  rotateKey: (passphrase: string) => Promise<string>;
+  /** Ein anderes Gerät hat den Schlüssel erneuert; dieses wartet auf die Passphrase. */
+  keyRotated: boolean;
   syncNow: () => Promise<void>;
   /**
    * Holt eine Anhang-Datei vom Server. `unavailable`: gerade wird nicht
@@ -144,12 +153,23 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   /** Hochgezählt, wenn das Netz zurück ist und der Vault noch einmal beim Server erfragt werden soll. */
   const [vaultCheck, setVaultCheck] = useState(0);
   const [unsyncedOther, setUnsyncedOther] = useState(0);
+  const [keyRotated, setKeyRotated] = useState(false);
+  /** Hochgezählt, um die Engine neu aufzusetzen – nach einer Rotation mit dem neuen Schlüssel. */
+  const [engineRun, setEngineRun] = useState(0);
 
   /** Fehler eines Laufs. Der Vault-Wechsel ist keiner, sondern eine Frage an den Nutzer. */
   const applyError = useCallback((cause: unknown) => {
     if (cause instanceof VaultSwitchError) {
       setUnsyncedOther(cause.unsynced);
       setState((current) => (SYNCING_STATES.has(current) ? 'vault-conflict' : current));
+      return;
+    }
+    // Ein anderes Gerät hat rotiert: Der gespeicherte Schlüssel taugt nicht mehr. Sperren und
+    // den Vault neu laden, das holt den neuen Schlüsselbund; danach fragt die App nach der Passphrase.
+    if (cause instanceof KeyOutdatedError) {
+      setKeyRotated(true);
+      setState((current) => (SYNCING_STATES.has(current) ? 'locked' : current));
+      void vault.lock().then(() => setVaultCheck((n) => n + 1));
       return;
     }
     setError(messageOf(cause));
@@ -234,6 +254,10 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
 
         const remote = data?.[0] as { id: string; keyring: Keyring } | undefined;
         if (remote !== undefined) {
+          const local = await vault.loadKeyring();
+          if (local !== undefined && local.vaultId === remote.keyring.vaultId && remote.keyring.keyVersion > local.keyVersion) {
+            setKeyRotated(true);
+          }
           await setMeta('keyring', remote.keyring);
           // Erst nach dem Schlüsselbund vom Server: `restore` prüft gegen genau diesen.
           const unlocked = await vault.restore();
@@ -315,7 +339,12 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       const keyring = await vault.loadKeyring();
       if (keyring === undefined || cancelled) return;
       const adapter = new SupabaseSyncAdapter(client, keyring.vaultId);
-      const access = { key: vault.currentKey, keyVersion: vault.currentKeyVersion, vaultId: () => keyring.vaultId };
+      const access = {
+        key: vault.currentKey,
+        keyVersion: vault.currentKeyVersion,
+        keyFor: vault.keyFor,
+        vaultId: () => keyring.vaultId,
+      };
       const files = new BlobSync(new SupabaseBlobAdapter(client, keyring.vaultId), access);
       const next = new SyncEngine(adapter, access, files);
       engine.current = next;
@@ -332,7 +361,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       blobs.current = null;
       setCanFetchAttachments(false);
     };
-  }, [client, canSync, applyResult, applyError]);
+  }, [client, canSync, applyResult, applyError, engineRun]);
 
   const loadSubscription = useCallback(async () => {
     if (client === null || client === undefined) return;
@@ -413,6 +442,19 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
           },
         };
 
+  /**
+   * Nach dem Entsperren: Nachweis für den Server nachtragen, falls er noch keinen kennt. Ohne
+   * Netz macht das nichts – das nächste Entsperren versucht es wieder.
+   */
+  const afterUnlock = (proof: string): void => {
+    setKeyRotated(false);
+    setState('ready');
+    if (client === null || client === undefined) return;
+    void vault.loadKeyring().then((keyring) =>
+      keyring === undefined ? undefined : registerKeyCheck(client, keyring, proof).catch(() => undefined),
+    );
+  };
+
   const value: SyncContextValue = {
     state,
     checkout: withRefresh(billing?.checkout(session) ?? null),
@@ -464,7 +506,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       if (client === null || client === undefined) throw new Error('Kein Supabase-Projekt konfiguriert.');
       setError(null);
       try {
-        const { recoveryKey } = await vault.setupVault(passphrase);
+        const { recoveryKey, proof } = await vault.setupVault(passphrase);
         const keyring = await vault.loadKeyring();
         if (keyring === undefined) throw new Error('Schlüsselbund konnte nicht gespeichert werden.');
         const remote = await ensureVault(client, keyring.vaultId, keyring);
@@ -478,6 +520,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
           setState('locked');
           throw new Error(t.sync.vaultExists);
         }
+        await registerKeyCheck(client, keyring, proof).catch(() => undefined);
         setState('ready');
         return recoveryKey;
       } catch (cause) {
@@ -488,14 +531,12 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
 
     unlock: (passphrase) =>
       guard(async () => {
-        await vault.unlock(passphrase);
-        setState('ready');
+        afterUnlock(await vault.unlock(passphrase));
       }),
 
     unlockWithRecovery: (recoveryKey) =>
       guard(async () => {
-        await vault.unlockWithRecovery(recoveryKey);
-        setState('ready');
+        afterUnlock(await vault.unlockWithRecovery(recoveryKey));
       }),
 
     lock: () => {
@@ -508,6 +549,25 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
         if (client === null || client === undefined) throw new Error('Kein Supabase-Projekt konfiguriert.');
         await vault.changePassphrase(oldPassphrase, newPassphrase, (keyring) => updateKeyring(client, keyring));
       }),
+
+    keyRotated,
+    rotateKey: async (passphrase) => {
+      if (client === null || client === undefined) throw new Error('Kein Supabase-Projekt konfiguriert.');
+      setError(null);
+      // Während der Rotation darf kein Lauf mit dem alten Schlüssel hochladen: Der Server wiese
+      // ihn ab, und die App hielte das für eine Rotation auf einem anderen Gerät.
+      stopEngine.current?.();
+      await engine.current?.idle();
+      try {
+        return await vault.rotate(passphrase, (rotated) => rotateVaultKey(client, rotated));
+      } catch (cause) {
+        setError(messageOf(cause));
+        throw cause;
+      } finally {
+        // Die neue Engine schlüsselt im ersten Lauf um (`reencryptPending`).
+        setEngineRun((n) => n + 1);
+      }
+    },
 
     canFetchAttachments,
     apiTokens:
@@ -535,7 +595,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
           const result = await engine.current?.syncOnce();
           if (result !== undefined) applyResult(result);
         } catch (cause) {
-          if (!(cause instanceof VaultSwitchError)) throw cause;
+          if (!(cause instanceof VaultSwitchError || cause instanceof KeyOutdatedError)) throw cause;
           applyError(cause);
         }
       }),

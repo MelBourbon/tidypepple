@@ -14,6 +14,8 @@ import { t } from '@/i18n';
 export function SyncSettings(): React.ReactNode {
   const sync = useSync();
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+  /** Der angezeigte Schlüssel ersetzt einen bisherigen (nach einer Rotation). */
+  const [recoveryReplaced, setRecoveryReplaced] = useState(false);
 
   return (
     <div className="rounded-card border border-line bg-surface p-3">
@@ -24,7 +26,14 @@ export function SyncSettings(): React.ReactNode {
       )}
 
       {recoveryKey !== null ? (
-        <RecoveryKeyPanel value={recoveryKey} onDone={() => setRecoveryKey(null)} />
+        <RecoveryKeyPanel
+          value={recoveryKey}
+          replaced={recoveryReplaced}
+          onDone={() => {
+            setRecoveryKey(null);
+            setRecoveryReplaced(false);
+          }}
+        />
       ) : (
         <>
           {sync.state === 'unconfigured' && <Unconfigured />}
@@ -34,6 +43,14 @@ export function SyncSettings(): React.ReactNode {
           {sync.state === 'needs-subscription' && <Premium />}
           {sync.state === 'ready' && <Ready />}
           {(sync.state === 'ready' || sync.state === 'needs-subscription') && <ChangePassphrase />}
+          {sync.state === 'ready' && (
+            <RotateKey
+              onRotated={(key) => {
+                setRecoveryReplaced(true);
+                setRecoveryKey(key);
+              }}
+            />
+          )}
           {sync.state === 'vault-conflict' && <VaultConflict />}
           {sync.state === 'loading' && <p className="text-sm text-muted">…</p>}
         </>
@@ -325,6 +342,67 @@ function ChangePassphrase(): React.ReactNode {
   );
 }
 
+/**
+ * Vault-Key erneuern. Selten und folgenreich, deshalb eingeklappt und mit allen Folgen vorab:
+ * neue Passphrase-Abfrage auf den anderen Geräten, neuer Wiederherstellungsschlüssel, keine
+ * API-Tokens mehr.
+ */
+function RotateKey({ onRotated }: { onRotated: (recoveryKey: string) => void }): React.ReactNode {
+  const sync = useSync();
+  const [open, setOpen] = useState(false);
+  const [passphrase, setPassphrase] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-2 block text-xs text-accent hover:underline">
+        {t.sync.rotateKey}
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="mt-4 border-t border-line pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setBusy(true);
+        void sync
+          .rotateKey(passphrase)
+          .then((recoveryKey) => {
+            setPassphrase('');
+            setOpen(false);
+            onRotated(recoveryKey);
+          })
+          .catch(() => undefined)
+          .finally(() => setBusy(false));
+      }}
+    >
+      <h3 className="text-heading-14">{t.sync.rotateKey}</h3>
+      <p className="mt-1 text-xs text-muted">{t.sync.rotateKeyWhy}</p>
+      <ul className="mt-2 mb-3 list-disc pl-5 text-xs text-muted">
+        {t.sync.rotateKeyEffects.map((effect) => (
+          <li key={effect}>{effect}</li>
+        ))}
+      </ul>
+
+      <label className="mb-1 block text-overline" htmlFor="pp-rotate">
+        {t.sync.passphrase}
+      </label>
+      <Input id="pp-rotate" type="password" autoComplete="current-password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+
+      <Row>
+        <Primary type="submit" disabled={passphrase === '' || busy}>
+          {busy ? t.sync.rotating : t.sync.rotateKeySubmit}
+        </Primary>
+        <Secondary type="button" disabled={busy} onClick={() => setOpen(false)}>
+          {t.sync.cancel}
+        </Secondary>
+      </Row>
+    </form>
+  );
+}
+
 function CreateVault({ onCreated }: { onCreated: (key: string) => void }): React.ReactNode {
   const sync = useSync();
   const [passphrase, setPassphrase] = useState('');
@@ -376,10 +454,19 @@ function CreateVault({ onCreated }: { onCreated: (key: string) => void }): React
  * Der Wiederherstellungsschlüssel wird genau einmal angezeigt. Deshalb blockiert dieses
  * Panel alles andere, bis der Nutzer bestätigt hat – ein Toast wäre hier zu beiläufig.
  */
-function RecoveryKeyPanel({ value, onDone }: { value: string; onDone: () => void }): React.ReactNode {
+function RecoveryKeyPanel({
+  value,
+  replaced = false,
+  onDone,
+}: {
+  value: string;
+  replaced?: boolean;
+  onDone: () => void;
+}): React.ReactNode {
   return (
     <div>
       <h3 className="text-heading-14">{t.sync.recoveryTitle}</h3>
+      {replaced && <p className="mt-1 text-sm">{t.sync.recoveryReplaced}</p>}
       <p className="mt-1 text-xs text-muted">{t.sync.recoveryHint}</p>
       <p className="my-3 rounded-md border border-line bg-raised px-3 py-3 text-center font-mono text-base tracking-wider tabular-nums select-all">
         {value}
@@ -448,6 +535,7 @@ function Unlock(): React.ReactNode {
       }}
     >
       <h3 className="mb-3 text-heading-14">{t.sync.unlockTitle}</h3>
+      {sync.keyRotated && <p className="mb-3 text-sm">{t.sync.keyRotated}</p>}
       <label className="mb-1 block text-overline" htmlFor="unlock-secret">
         {useRecovery ? t.sync.recoveryKeyLabel : t.sync.passphrase}
       </label>

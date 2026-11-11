@@ -373,6 +373,19 @@ export const de = {
     changePassphraseSubmit: 'Ändern',
     cancel: 'Abbrechen',
     passphraseChanged: 'Die Passphrase ist geändert.',
+    rotateKey: 'Schlüssel erneuern',
+    rotateKeyWhy:
+      'Nach einem widerrufenen API-Token oder einem verlorenen Gerät: Wer den bisherigen Schlüssel hat, kann damit nichts mehr lesen, was auf dem Server liegt.',
+    rotateKeyEffects: [
+      'Alle Aufgaben und Anhänge werden auf dem Server neu verschlüsselt. Bei vielen Anhängen dauert das.',
+      'Alle API-Tokens werden widerrufen.',
+      'Deine anderen Geräte fragen einmal nach der Passphrase.',
+      'Du bekommst einen neuen Wiederherstellungsschlüssel. Der bisherige gilt nicht mehr.',
+    ],
+    rotateKeySubmit: 'Erneuern',
+    rotating: 'Wird erneuert …',
+    recoveryReplaced: 'Der Schlüssel ist erneuert. Dein bisheriger Wiederherstellungsschlüssel gilt nicht mehr.',
+    keyRotated: 'Der Schlüssel wurde auf einem anderen Gerät erneuert. Gib deine Passphrase ein, um weiter zu synchronisieren.',
     create: 'Vault anlegen',
 
     recoveryTitle: 'Wiederherstellungsschlüssel',
@@ -484,7 +497,7 @@ export const de = {
     revoke: 'Widerrufen',
     revokeConfirm: 'Wirklich widerrufen?',
     revokeHint:
-      'Widerrufen sperrt den Zugang sofort. Daten, die mit dem Token schon abgerufen wurden, bleiben für dessen Besitzer lesbar.',
+      'Widerrufen sperrt den Zugang sofort. Daten, die mit dem Token schon abgerufen wurden, bleiben für dessen Besitzer lesbar. Wurde das Token weitergegeben oder ist es abhandengekommen, erneuere danach unter Synchronisation den Schlüssel.',
     newTitle: 'Neues Token',
     name: 'Name',
     namePlaceholder: 'z. B. Claude Desktop',

@@ -1,6 +1,7 @@
 import type { BlobAdapter, BlobUploadStatus } from './adapter';
-import type { VaultAccess } from './engine';
-import { openFile, sealFile } from '@/crypto/attachment';
+import { keyOf, type VaultAccess } from './engine';
+import { KeyOutdatedError } from './errors';
+import { fileKeyVersion, openFile, sealFile } from '@/crypto/attachment';
 import { db, type BlobQueueEntry } from '@/data/db';
 import type { Attachment, Task } from '@/domain/types';
 
@@ -79,11 +80,39 @@ export class BlobSync {
     return { uploaded, removed: gone.length, blocked };
   }
 
+  /**
+   * Nach einer Rotation: jede Datei, die noch mit einem früheren Schlüssel auf dem Server
+   * liegt, mit dem aktuellen neu verschlüsseln und ersetzen. Bekannt sind die Dateien über
+   * die Aufgaben dieses Geräts, Tombstones eingeschlossen. Liefert die Zahl ersetzter Dateien.
+   */
+  async reencryptAll(): Promise<number> {
+    if (this.adapter.replace === undefined) return 0;
+    const current = this.vault.keyVersion();
+    let count = 0;
+    for (const task of await db.tasks.toArray()) {
+      for (const attachment of task.attachments) {
+        const path = pathOf(task.id, attachment.id);
+        const sealed = await this.adapter.download(path);
+        if (sealed === null || fileKeyVersion(sealed) >= current) continue;
+        const key = keyOf(this.vault, fileKeyVersion(sealed));
+        if (key === undefined) continue;
+        const plain = await openFile(key, attachment.id, sealed);
+        await this.adapter.replace(path, await sealFile(this.vault.key(), current, attachment.id, plain));
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   /** Lädt eine Datei, die auf diesem Gerät fehlt, und legt sie lokal ab. */
   async fetch(taskId: string, attachment: Attachment): Promise<FetchResult> {
     const sealed = await this.adapter.download(pathOf(taskId, attachment.id));
     if (sealed === null) return 'missing';
-    const data = await openFile(this.vault.key(), attachment.id, sealed);
+    const version = fileKeyVersion(sealed);
+    if (version > this.vault.keyVersion()) throw new KeyOutdatedError();
+    const key = keyOf(this.vault, version);
+    if (key === undefined) throw new Error('Für diese Datei gibt es keinen Schlüssel mehr.');
+    const data = await openFile(key, attachment.id, sealed);
     await db.blobs.put({ id: attachment.id, data });
     return 'ok';
   }
