@@ -5,6 +5,8 @@ import {
   ApiTokenInvalidError,
   ENTITLEMENT_REQUIRED_CODE,
   EntitlementRequiredError,
+  RECORD_QUOTA_CODE,
+  RecordQuotaError,
   VAULT_FORBIDDEN_CODE,
   VaultForbiddenError,
 } from './errors';
@@ -80,6 +82,8 @@ export class ApiClient {
         throw new EntitlementRequiredError(message);
       case VAULT_FORBIDDEN_CODE:
         throw new VaultForbiddenError(message);
+      case RECORD_QUOTA_CODE:
+        throw new RecordQuotaError(message);
       default:
         throw new Error(`${name} fehlgeschlagen: ${message}`);
     }

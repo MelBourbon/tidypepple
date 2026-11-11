@@ -335,6 +335,8 @@ export const en: Messages = {
     lastResult: (r: { pushed: number; pulled: number; filesUploaded: number }) =>
       `${r.pushed} sent · ${r.pulled} received` +
       (r.filesUploaded > 0 ? ` · ${r.filesUploaded} ${r.filesUploaded === 1 ? 'attachment' : 'attachments'} uploaded` : ''),
+    recordQuota:
+      'The space for tasks on the server is full. New changes stay on this device for now – delete done or old tasks with long notes.',
     filesQuota: 'The 200 MB for attachments on the server are used up. New attachments stay on this device for now.',
 
     setupTitle: 'Set up vault',
@@ -344,6 +346,14 @@ export const en: Messages = {
     passphraseRepeat: 'Repeat passphrase',
     passphraseMismatch: 'The passphrases do not match.',
     passphraseTooShort: 'Please use at least 10 characters.',
+    changePassphrase: 'Change passphrase',
+    changePassphraseHint:
+      'Applies to all devices at once. Unlocked devices stay unlocked; new ones ask for the new passphrase. Your recovery key stays valid.',
+    currentPassphrase: 'Current passphrase',
+    newPassphrase: 'New passphrase',
+    changePassphraseSubmit: 'Change',
+    cancel: 'Cancel',
+    passphraseChanged: 'Your passphrase has been changed.',
     create: 'Create vault',
 
     recoveryTitle: 'Recovery key',

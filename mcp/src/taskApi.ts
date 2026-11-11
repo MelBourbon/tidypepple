@@ -1,6 +1,6 @@
 import { captureTask } from '@/data/capture';
 import { db } from '@/data/db';
-import { deleteTask, ensureContexts, ensureProject, setParent, setStatus, updateTask } from '@/data/repo';
+import { deleteTask, ensureContexts, ensureProject, setParent, setStatus, updateTask, type ProjectScope } from '@/data/repo';
 import { engageableTasks } from '@/domain/listQuery';
 import { allProjects, buildGraph, isProject, selfAndDescendantIds, type TaskGraph } from '@/domain/projects';
 import { allTags, hasTag, tagKey, withTag, withoutTag } from '@/domain/tags';
@@ -90,9 +90,16 @@ const matchesQuery = (task: Task, query: string): boolean => {
   return words.every((word) => haystack.includes(word));
 };
 
+/**
+ * Der Stand, den die Werkzeuge sehen. Mit `TIDYPEPPLE_ONLY_TAG` enthalten `tasks` und `graph`
+ * nur Aufgaben mit dem Tag: Elternteile, Schritte und Projekte ohne ihn existieren für das
+ * Werkzeug nicht – auch nicht als Titel eines Elternteils oder als Zahl offener Schritte.
+ */
 interface Snapshot {
   tasks: Task[];
   graph: TaskGraph;
+  /** Alle Aufgaben. Nur für Regeln, die den ganzen Bestand brauchen (welcher Schritt ist dran). */
+  fullGraph: TaskGraph;
   contextsById: Map<string, Context>;
 }
 
@@ -116,9 +123,21 @@ export class TaskApi {
     return this.onlyTag === null || hasTag(task, this.onlyTag);
   }
 
+  /** Für `ensureProject` und das Erfassen: nur sichtbare Projekte, neue bekommen den Tag. */
+  private get scope(): ProjectScope {
+    return this.onlyTag === null ? {} : { where: (task) => this.visible(task), tags: [this.onlyTag] };
+  }
+
   private async snapshot(): Promise<Snapshot> {
-    const [tasks, contexts] = await Promise.all([db.tasks.toArray(), db.contexts.toArray()]);
-    return { tasks, graph: buildGraph(tasks), contextsById: new Map(contexts.map((c) => [c.id, c])) };
+    const [all, contexts] = await Promise.all([db.tasks.toArray(), db.contexts.toArray()]);
+    const fullGraph = buildGraph(all);
+    const tasks = this.onlyTag === null ? all : all.filter((t) => this.visible(t));
+    return {
+      tasks,
+      graph: this.onlyTag === null ? fullGraph : buildGraph(tasks),
+      fullGraph,
+      contextsById: new Map(contexts.map((c) => [c.id, c])),
+    };
   }
 
   private toPublic(task: Task, snap: Snapshot): PublicTask {
@@ -168,7 +187,7 @@ export class TaskApi {
     const view = input.view ?? 'open';
     let tasks: readonly Task[] =
       view === 'actionable'
-        ? engageableTasks(snap.graph)
+        ? engageableTasks(snap.fullGraph)
         : snap.tasks.filter((t) => isLive(t) && (view === 'done' ? t.status === 'done' : isOpen(t)));
 
     tasks = tasks.filter((t) => this.visible(t));
@@ -224,7 +243,12 @@ export class TaskApi {
   async listContexts(): Promise<{ contexts: { name: string; openTasks: number }[] }> {
     const snap = await this.snapshot();
     const open = snap.tasks.filter((t) => isOpen(t) && this.visible(t));
-    const contexts = [...snap.contextsById.values()].filter(isLive).sort((a, b) => a.order.localeCompare(b.order));
+    // Mit Tag-Grenze nur Kontexte, die eine sichtbare Aufgabe trägt: die Namen der übrigen
+    // ("Arzt", "Anwalt") sagen schon etwas über das Leben außerhalb der Sicht.
+    const used = new Set(snap.tasks.filter(isLive).flatMap((t) => t.contexts));
+    const contexts = [...snap.contextsById.values()]
+      .filter((c) => isLive(c) && (this.onlyTag === null || used.has(c.id)))
+      .sort((a, b) => a.order.localeCompare(b.order));
     return {
       contexts: contexts.map((c) => ({ name: c.name, openTasks: open.filter((t) => t.contexts.includes(c.id)).length })),
     };
@@ -281,13 +305,11 @@ export class TaskApi {
 
   /** Erfassen in Quick-Add-Syntax wie in der App: `Titel @kontext +projekt #tag !morgen !!`. */
   async addTask(text: string, notes?: string): Promise<{ task: PublicTask }> {
-    const result = await captureTask(text);
+    // Mit Tag-Grenze: `+Projekt` findet nur sichtbare Projekte, und Aufgabe wie neues Projekt
+    // bekommen den Tag – sonst verschwänden sie sofort aus der eigenen Sicht.
+    const result = await captureTask(text, this.scope);
     if (result === null) throw new Error('Kein Titel erkannt.');
-    const extra: Partial<Task> = {};
-    if (notes !== undefined && notes !== '') extra.notes = notes;
-    // Sonst verschwände die neue Aufgabe sofort aus der eigenen Sicht.
-    if (this.onlyTag !== null && !hasTag(result.task, this.onlyTag)) extra.tags = withTag(result.task.tags, this.onlyTag);
-    if (Object.keys(extra).length > 0) await updateTask(result.task.id, extra);
+    if (notes !== undefined && notes !== '') await updateTask(result.task.id, { notes });
     return this.getTask(result.task.id).then(({ task }) => ({ task }));
   }
 
@@ -325,7 +347,8 @@ export class TaskApi {
     if (Object.keys(changes).length > 0) await updateTask(id, changes);
 
     if (patch.project !== undefined) {
-      const parentId = patch.project === null ? null : (await ensureProject(patch.project.replace(/^\+/, '').trim())).id;
+      const parentId =
+        patch.project === null ? null : (await ensureProject(patch.project.replace(/^\+/, '').trim(), this.scope)).id;
       if (!(await setParent(id, parentId))) throw new Error('Eine Aufgabe kann nicht unter sich selbst stehen.');
     }
 
@@ -344,9 +367,17 @@ export class TaskApi {
     return this.getTask(id).then(({ task }) => ({ task }));
   }
 
-  /** Löscht samt Schritten, wie in der App. */
+  /**
+   * Löscht samt Schritten, wie in der App. Mit Tag-Grenze nur, wenn alle Schritte sichtbar
+   * sind: Das Löschen nähme sonst Aufgaben mit, die das Werkzeug nie zu sehen bekam.
+   */
   async deleteTask(id: string): Promise<{ deletedIds: string[] }> {
     await this.requireTask(id);
+    if (this.onlyTag !== null) {
+      const all = buildGraph(await db.tasks.toArray());
+      const hidden = [...selfAndDescendantIds(all, id)].some((d) => !this.visible(all.byId.get(d)!));
+      if (hidden) throw new Error('Die Aufgabe hat Schritte ohne den Tag und lässt sich deshalb nur in der App löschen.');
+    }
     return { deletedIds: [...(await deleteTask(id))] };
   }
 }

@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { TaskApi } from './taskApi';
-import { TASK_STATUSES } from '@/domain/types';
+import { MAX_NOTES_LENGTH, TASK_STATUSES } from '@/domain/types';
 
 /**
  * Die MCP-Werkzeuge. Sie sind zugleich die öffentliche API für Skripte: Jedes Werkzeug hat
@@ -179,8 +179,8 @@ export function createServer(api: TaskApi, options: { writable: boolean; version
         '@ Kontext, + Projekt (wird bei Bedarf angelegt), # Tag, ! fällig, > zurückgestellt bis, !! wichtig. ' +
         'Daten: heute, morgen, mo…so, +3, 2026-10-01, 1.10. Ohne Kontext und Datum landet sie in der Inbox.',
       inputSchema: {
-        text: z.string().min(1),
-        notes: z.string().optional(),
+        text: z.string().min(1).max(1000),
+        notes: z.string().max(MAX_NOTES_LENGTH).optional(),
       },
       outputSchema: taskResult,
     },
@@ -196,8 +196,8 @@ export function createServer(api: TaskApi, options: { writable: boolean; version
         'addTags/removeTags ändern sie. project: Projekt-Name (wird angelegt, falls es fehlt) oder null.',
       inputSchema: {
         id: taskId,
-        title: z.string().optional(),
-        notes: z.string().optional(),
+        title: z.string().max(1000).optional(),
+        notes: z.string().max(MAX_NOTES_LENGTH).optional(),
         status: status.optional(),
         dueDate: isoDate.nullable().optional(),
         dueTime: time.nullable().optional(),

@@ -368,9 +368,19 @@ export async function setParent(id: string, parentId: string | null): Promise<bo
  * Sucht ein offenes Projekt (oder eine Aufgabe) dieses Namens, ohne Rücksicht auf Groß- und
  * Kleinschreibung, und legt es sonst an. Eine gefundene Aufgabe wird dauerhaft zum Projekt.
  */
-export async function ensureProject(name: string): Promise<Task> {
-  const existing = findReusableProject(await db.tasks.toArray(), name);
-  if (existing === undefined) return createTask({ title: name, status: 'next', pinnedAsProject: true });
+export interface ProjectScope {
+  /** Nur diese Aufgaben kommen als vorhandenes Projekt in Frage (MCP: `TIDYPEPPLE_ONLY_TAG`). */
+  where?: ((task: Task) => boolean) | undefined;
+  /** Tags für ein neu angelegtes Projekt. */
+  tags?: readonly string[] | undefined;
+}
+
+export async function ensureProject(name: string, scope: ProjectScope = {}): Promise<Task> {
+  const candidates = (await db.tasks.toArray()).filter((task) => scope.where?.(task) ?? true);
+  const existing = findReusableProject(candidates, name);
+  if (existing === undefined) {
+    return createTask({ title: name, status: 'next', pinnedAsProject: true, tags: [...(scope.tags ?? [])] });
+  }
   if (!existing.pinnedAsProject) await setProjectPinned(existing.id, true);
   return existing;
 }

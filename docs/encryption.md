@@ -12,6 +12,14 @@ The vault key is not derived *from* the passphrase, only wrapped *with* it. That
 changing the passphrase requires no re-encryption at all, and why there can be a second way
 in without the server being able to read anything.
 
+**Changing the passphrase** (*Settings → Sync*) rewraps the vault key and uploads the new
+keyring (`update_keyring`, `0006_change_passphrase.sql`). The server accepts a change to the
+passphrase part only; the recovery key keeps working, so a stolen session cannot lock anyone
+out. It protects against someone who learns the old passphrase *later*. It does not help
+against someone who already unlocked the vault with it, or who holds a revoked API token:
+they have the vault key itself. Rotating the vault key – re-encrypting everything under a new
+one – does not exist yet.
+
 Every record is encrypted with its own IV; record ID and key version go in as AAD, so the
 server cannot swap ciphertext between records.
 

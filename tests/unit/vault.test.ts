@@ -63,3 +63,50 @@ describe('Vault über einen Neustart', () => {
     expect(vault.isUnlocked()).toBe(false);
   });
 });
+
+describe('Passphrase ändern', () => {
+  it('verpackt den Schlüssel neu; alte Daten bleiben lesbar, der Wiederherstellungsschlüssel gilt weiter', async () => {
+    const vault = await restart();
+    const { recoveryKey } = await vault.setupVault('alte-passphrase-1');
+    const sealed = await seal(vault.currentKey(), 'r1', vault.currentKeyVersion(), { title: 'geheim' });
+    const before = await vault.loadKeyring();
+
+    const uploaded: unknown[] = [];
+    await vault.changePassphrase('alte-passphrase-1', 'neue-passphrase-2', async (keyring) => {
+      uploaded.push(keyring);
+    });
+
+    const after = await vault.loadKeyring();
+    expect(uploaded).toEqual([after]);
+    // Was der Server prüft: nur die Passphrase hat sich geändert.
+    expect({ ...after, passphrase: null }).toEqual({ ...before, passphrase: null });
+
+    const fresh = await restart();
+    await fresh.lock();
+    await expect(fresh.unlock('alte-passphrase-1')).rejects.toThrow();
+    await fresh.unlock('neue-passphrase-2');
+    expect(await open(fresh.currentKey(), 'r1', sealed)).toEqual({ title: 'geheim' });
+    await fresh.lock();
+    await fresh.unlockWithRecovery(recoveryKey);
+    expect(await open(fresh.currentKey(), 'r1', sealed)).toEqual({ title: 'geheim' });
+  });
+
+  it('ändert nichts, wenn die bisherige Passphrase falsch ist oder der Server ablehnt', async () => {
+    const vault = await restart();
+    await vault.setupVault('alte-passphrase-1');
+    const before = await vault.loadKeyring();
+
+    let calls = 0;
+    await expect(
+      vault.changePassphrase('falsch-falsch-falsch', 'neue-passphrase-2', async () => {
+        calls += 1;
+      }),
+    ).rejects.toBeInstanceOf(vault.WrongPassphraseError);
+    expect(calls).toBe(0);
+
+    await expect(
+      vault.changePassphrase('alte-passphrase-1', 'neue-passphrase-2', () => Promise.reject(new Error('offline'))),
+    ).rejects.toThrow('offline');
+    expect(await vault.loadKeyring()).toEqual(before);
+  });
+});

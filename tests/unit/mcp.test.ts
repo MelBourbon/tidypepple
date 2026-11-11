@@ -4,7 +4,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../../mcp/src/server';
 import { TaskApi } from '../../mcp/src/taskApi';
 import { db } from '@/data/db';
-import { initRepo, resetRepo } from '@/data/repo';
+import { createContext, createTask, initRepo, resetRepo } from '@/data/repo';
 import { open, seal } from '@/crypto/envelope';
 import {
   authHash,
@@ -261,6 +261,40 @@ describe('MCP-Server', () => {
       // Den Tag selbst kann das LLM nicht entfernen – sonst verlöre es die Aufgabe aus der Sicht.
       const { task: updated } = await call<{ task: PublicTask }>(client, 'update_task', { id: task.id, tags: [] });
       expect(updated.tags).toEqual(['ai']);
+    });
+
+    it('verrät nichts über Aufgaben ohne den Tag', async () => {
+      const arzt = await createContext('Arzt');
+      const buero = await createContext('Büro');
+      const privat = await createTask({ title: 'Scheidung', status: 'next', pinnedAsProject: true, contexts: [arzt.id] });
+      const schritt = await createTask({ title: 'Prompt testen', status: 'next', parentId: privat.id, tags: ['ai'], contexts: [buero.id] });
+      await createTask({ title: 'Anwalt anrufen', status: 'next', parentId: privat.id });
+      const { client } = await connect({ onlyTag: 'ai' });
+
+      // Kein Titel des Elternteils, und es zählt nicht als Projekt.
+      const { task } = await call<{ task: PublicTask }>(client, 'get_task', { id: schritt.id });
+      expect(task.parent).toBeNull();
+      expect((await call<{ projects: PublicTask[] }>(client, 'list_projects')).projects).toEqual([]);
+      // Nur Kontexte, die eine sichtbare Aufgabe trägt.
+      const { contexts } = await call<{ contexts: { name: string }[] }>(client, 'list_contexts');
+      expect(contexts.map((c) => c.name)).toEqual(['Büro']);
+      // Gleichnamiges Projekt ohne Tag: nicht übernehmen, sondern ein eigenes, sichtbares anlegen.
+      const { task: neu } = await call<{ task: PublicTask }>(client, 'add_task', { text: 'Notizen sammeln +Scheidung' });
+      expect(neu.parent?.id).not.toBe(privat.id);
+      expect(neu.parent?.title).toBe('Scheidung');
+      expect((await db.tasks.get(neu.parent!.id))?.tags).toEqual(['ai']);
+      expect((await db.tasks.get(privat.id))?.pinnedAsProject).toBe(true);
+    });
+
+    it('löscht keine Schritte mit, die es nicht sieht', async () => {
+      const projekt = await createTask({ title: 'KI-Projekt', status: 'next', pinnedAsProject: true, tags: ['ai'] });
+      const versteckt = await createTask({ title: 'Ohne Tag', status: 'next', parentId: projekt.id });
+      const { client } = await connect({ onlyTag: 'ai' });
+
+      const result = await client.callTool({ name: 'delete_task', arguments: { id: projekt.id } });
+      expect(result.isError).toBe(true);
+      expect((await db.tasks.get(versteckt.id))?.deletedAt).toBeNull();
+      expect((await db.tasks.get(projekt.id))?.deletedAt).toBeNull();
     });
   });
 });

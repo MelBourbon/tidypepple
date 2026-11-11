@@ -9,6 +9,8 @@
 /** SQLSTATE aus `push_records()` – siehe `supabase/migrations/0001_schema.sql`. */
 export const ENTITLEMENT_REQUIRED_CODE = 'TP001';
 export const VAULT_FORBIDDEN_CODE = 'TP002';
+/** Der Speicher für Records des Vaults ist voll (0005_records_write_path.sql). */
+export const RECORD_QUOTA_CODE = 'TP006';
 
 /** SQLSTATE aus den API-Funktionen – siehe `supabase/migrations/0001_schema.sql`. */
 export const API_TOKEN_INVALID_CODE = 'TP004';
@@ -26,6 +28,18 @@ export class VaultForbiddenError extends Error {
   readonly name = 'VaultForbiddenError';
 
   constructor(message = 'Kein Zugriff auf diesen Vault.') {
+    super(message);
+  }
+}
+
+/**
+ * Der Server nimmt keine weiteren Records an: das Kontingent des Vaults ist belegt. Anders
+ * als "kein Abo" hilft hier kein Kauf, sondern nur Aufräumen; die Outbox bleibt erhalten.
+ */
+export class RecordQuotaError extends Error {
+  readonly name = 'RecordQuotaError';
+
+  constructor(message = 'Der Speicher für Aufgaben ist voll.') {
     super(message);
   }
 }

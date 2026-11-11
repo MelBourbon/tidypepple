@@ -4,6 +4,8 @@ import type { Keyring } from '@/crypto/keyring';
 import {
   ENTITLEMENT_REQUIRED_CODE,
   EntitlementRequiredError,
+  RECORD_QUOTA_CODE,
+  RecordQuotaError,
   VAULT_FORBIDDEN_CODE,
   VaultForbiddenError,
 } from './errors';
@@ -74,6 +76,15 @@ export async function ensureVault(
   return data as { vaultId: string; keyring: Keyring };
 }
 
+/**
+ * Neuen Schlüsselbund hochladen, nachdem sich die Passphrase geändert hat. Der Server nimmt
+ * nur eine geänderte Passphrase an, alles andere muss gleich bleiben (0006_change_passphrase.sql).
+ */
+export async function updateKeyring(client: SupabaseClient, keyring: Keyring): Promise<void> {
+  const { error } = await client.rpc('update_keyring', { p_vault_id: keyring.vaultId, p_keyring: keyring });
+  if (error !== null) throw new Error(`Passphrase konnte nicht geändert werden: ${error.message}`);
+}
+
 export class SupabaseSyncAdapter implements SyncAdapter {
   constructor(
     private readonly client: SupabaseClient,
@@ -92,6 +103,7 @@ export class SupabaseSyncAdapter implements SyncAdapter {
     // die fehlende Berechtigung von einem Netz- oder Serverproblem trennen.
     if (error.code === ENTITLEMENT_REQUIRED_CODE) throw new EntitlementRequiredError(error.message);
     if (error.code === VAULT_FORBIDDEN_CODE) throw new VaultForbiddenError(error.message);
+    if (error.code === RECORD_QUOTA_CODE) throw new RecordQuotaError(error.message);
     throw new Error(`Push fehlgeschlagen: ${error.message}`);
   }
 

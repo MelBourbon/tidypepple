@@ -94,6 +94,13 @@ update private.settings set require_subscription = false;
 
 Tap *Refresh status* in the app; the indicator switches to “In sync”.
 
+Each vault may store up to 50 MiB of encrypted tasks on the server (attachments have their own
+200 MiB). Ten thousand tasks take about 10 MiB. To change the limit:
+
+```sql
+update private.settings set record_quota_bytes = 104857600;  -- 100 MiB
+```
+
 To keep the requirement and only unlock individual accounts (for testing, say):
 
 ```sql
