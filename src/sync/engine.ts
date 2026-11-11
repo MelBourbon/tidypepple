@@ -32,6 +32,14 @@ const PAGE_SIZE = 200;
 const LOCAL_CHANGE_DELAY_MS = 1500;
 
 /**
+ * Nach einem fehlgeschlagenen Lauf von selbst erneut versuchen, mit wachsendem Abstand. Ohne
+ * das wartete der Sync nach einem Serverfehler auf den nächsten Anlass – bei einem Gerät, das
+ * offen auf dem Tisch liegt, womöglich Stunden.
+ */
+const RETRY_MIN_MS = 15_000;
+const RETRY_MAX_MS = 5 * 60_000;
+
+/**
  * Inhalt eines Records auf dem Server. Eine Löschung trägt nur, was sie braucht: der Inhalt
  * einer gelöschten Aufgabe verlässt das Gerät nicht mehr, und die Uhr der Löschung steht im
  * authentifizierten Ciphertext – nicht in der Klartextspalte, die der Server ändern könnte.
@@ -255,12 +263,26 @@ export class SyncEngine {
 
   /** Reagiert auf eigene und fremde Änderungen, Netzrückkehr und Rückkehr in den Tab. */
   start(onResult?: (result: SyncResult) => void, onError?: (error: unknown) => void): () => void {
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let retryDelay = RETRY_MIN_MS;
     const run = (): void => {
+      clearTimeout(retry);
+      retry = undefined;
       // Ohne dieses `catch` verschwindet jeder Fehler aus einem Hintergrundlauf als
       // unbehandelte Rejection – der Nutzer sähe nie, dass der Sync nicht läuft.
       void this.syncOnce()
-        .then((result) => onResult?.(result))
-        .catch((cause: unknown) => onError?.(cause));
+        .then((result) => {
+          retryDelay = RETRY_MIN_MS;
+          onResult?.(result);
+        })
+        .catch((cause: unknown) => {
+          onError?.(cause);
+          // Mehrere Anlässe teilen sich einen Lauf und scheitern gemeinsam: nur ein Timer.
+          if (stopped || retry !== undefined) return;
+          retry = setTimeout(run, retryDelay);
+          retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+        });
     };
 
     const unsubscribe = this.adapter.subscribe?.(run);
@@ -278,6 +300,8 @@ export class SyncEngine {
     run();
 
     return () => {
+      stopped = true;
+      clearTimeout(retry);
       unsubscribe?.();
       stopLocal();
       clearTimeout(pendingLocal);

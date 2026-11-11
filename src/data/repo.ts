@@ -54,6 +54,31 @@ function requireClock(): HlcState {
 }
 
 /**
+ * Uhr und Outbox-Zähler mit dem gespeicherten Stand abgleichen. Nur innerhalb einer
+ * Transaktion aufrufen, die `meta` einschließt.
+ *
+ * `clock` und `outboxSeq` sind nur ein Zwischenspeicher dieses Fensters. Ein zweites Fenster
+ * (weiterer Tab, installierte App neben dem Browser) schreibt in dieselbe Datenbank: Hat es
+ * per Pull einen fremden Stand geholt, dessen Uhr dieser hier voraus ist, bekäme die nächste
+ * Änderung von hier sonst einen älteren Stempel als der Record, auf dem sie aufsetzt. Der
+ * Server verwürfe sie, die Outbox hakte sie als gesendet ab – sie käme nie bei den anderen an.
+ */
+async function syncCounters(): Promise<HlcState> {
+  const local = requireClock();
+  const [storedClock, storedSeq] = await db.meta.bulkGet([META_KEYS.clock, META_KEYS.outboxSeq]);
+  const stored = storedClock?.value as HlcState | undefined;
+  if (
+    stored !== undefined &&
+    (stored.millis > local.millis || (stored.millis === local.millis && stored.counter > local.counter))
+  ) {
+    // Die Geräte-ID bleibt die eigene – siehe `initRepo`.
+    clock = { millis: stored.millis, counter: stored.counter, deviceId: local.deviceId };
+  }
+  outboxSeq = Math.max(outboxSeq, (storedSeq?.value as number | undefined) ?? 0);
+  return requireClock();
+}
+
+/**
  * Zentrale Schreiboperation: Zeitstempel setzen, Record schreiben, Outbox markieren –
  * alles in einer Transaktion, damit kein Record ohne Outbox-Eintrag existieren kann.
  */
@@ -68,8 +93,9 @@ async function mutate<T>(
     // gleichzeitiger Pull die Uhr bereits nachgezogen. Vorher getickt bekäme diese Änderung
     // einen älteren Stempel als der fremde Stand, auf dem sie aufsetzt – und der Server
     // verwürfe sie, während die Outbox sie als gesendet abhakt.
+    // Und sie kommt aus der Datenbank, nicht nur aus dem Speicher: siehe `syncCounters`.
     const now = Date.now();
-    const next = tick(requireClock(), now);
+    const next = tick(await syncCounters(), now);
     clock = next;
     const hlc = formatHlc(next);
     const dirtyRecords: OutboxEntry[] = [];
@@ -488,6 +514,7 @@ export async function confirmPushed(pushed: readonly PendingRecord[]): Promise<v
 export async function resyncAll(): Promise<void> {
   await initRepo();
   await db.transaction('rw', [db.tasks, db.contexts, db.outbox, db.meta, db.blobs, db.blobQueue], async () => {
+    await syncCounters();
     const queued = new Set((await db.outbox.toArray()).map((e) => e.recordId));
     const entries: OutboxEntry[] = [];
     const add = (kind: OutboxEntry['kind'], id: string): void => {
@@ -582,7 +609,7 @@ export async function applyRemoteTombstone(
   let applied = false;
 
   await db.transaction('rw', db.tasks, db.contexts, db.meta, async () => {
-    clock = mergeHlc(requireClock(), hlc, Date.now());
+    clock = mergeHlc(await syncCounters(), hlc, Date.now());
 
     // Unbekannt ist der Record hier nur, wenn er auf einem anderen Gerät angelegt und
     // gelöscht wurde, bevor dieses ihn sah. Dann gibt es nichts zu löschen.
@@ -654,6 +681,7 @@ export async function applyRemoteChanges(changes: readonly RemoteChange[]): Prom
   let applied = 0;
 
   await db.transaction('rw', db.tasks, db.contexts, db.meta, async () => {
+    await syncCounters();
     for (const change of changes) {
       // Was hier nicht passt, stammt aus einer kaputten oder fremden Version. Überspringen
       // statt werfen: ein Fehler bräche den Pull ab, und der Sync bliebe für immer daran hängen.

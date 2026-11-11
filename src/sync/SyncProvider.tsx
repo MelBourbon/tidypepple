@@ -121,6 +121,8 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   const engine = useRef<SyncEngine | null>(null);
   const blobs = useRef<BlobSync | null>(null);
   const [canFetchAttachments, setCanFetchAttachments] = useState(false);
+  /** Hochgezählt, wenn das Netz zurück ist und der Vault noch einmal beim Server erfragt werden soll. */
+  const [vaultCheck, setVaultCheck] = useState(0);
   const stopEngine = useRef<(() => void) | null>(null);
   const [billing, setBilling] = useState<BillingProvider | null>(() => selectBilling(platform(), null));
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
@@ -183,6 +185,13 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
     }
 
     let cancelled = false;
+    let stopWaiting: (() => void) | undefined;
+    // Entsperrt heißt: synchronisieren. `needs-subscription` bleibt dabei stehen – das weiß
+    // nur der Server, und der nächste Lauf stellt es ohnehin richtig.
+    const settle = (unlocked: boolean): void => {
+      setError(null);
+      setState((current) => (!unlocked ? 'locked' : SYNCING_STATES.has(current) ? current : 'ready'));
+    };
     void (async () => {
       try {
         const { data, error: queryError } = await client.from('vaults').select('id, keyring').limit(1);
@@ -194,7 +203,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
           await setMeta('keyring', remote.keyring);
           // Erst nach dem Schlüsselbund vom Server: `restore` prüft gegen genau diesen.
           const unlocked = await vault.restore();
-          if (!cancelled) setState(unlocked ? 'ready' : 'locked');
+          if (!cancelled) settle(unlocked);
           return;
         }
         if (!(await vault.hasVault())) {
@@ -218,9 +227,24 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
           }
         }
         const unlocked = await vault.restore();
-        if (!cancelled) setState(unlocked ? 'ready' : 'locked');
+        if (!cancelled) settle(unlocked);
       } catch (cause) {
         if (cancelled) return;
+        // Sobald das Netz zurück ist, noch einmal fragen – der Fehler war meist nur das.
+        const retry = (): void => setVaultCheck((n) => n + 1);
+        window.addEventListener('online', retry, { once: true });
+        stopWaiting = () => window.removeEventListener('online', retry);
+
+        // Start ohne Netz: Dieses Gerät kennt seinen Vault schon. Ohne diesen Weg stünde die
+        // App im Fehlerzustand, die Engine liefe nie an – und mit ihr fehlte auch, was bei
+        // der Rückkehr des Netzes den Sync wieder anstößt.
+        const known = await vault.hasVault().catch(() => false);
+        if (cancelled) return;
+        if (known) {
+          const unlocked = await vault.restore().catch(() => false);
+          if (!cancelled) settle(unlocked);
+          return;
+        }
         setError(messageOf(cause));
         setState('error');
       }
@@ -228,8 +252,9 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
 
     return () => {
       cancelled = true;
+      stopWaiting?.();
     };
-  }, [client, session]);
+  }, [client, session, vaultCheck]);
 
   /**
    * Ergebnis eines Laufs auswerten. `pushBlocked` ist die einzige Quelle für den
