@@ -34,6 +34,7 @@ export function SyncSettings(): React.ReactNode {
           {sync.state === 'needs-subscription' && <Premium />}
           {sync.state === 'ready' && <Ready />}
           {(sync.state === 'ready' || sync.state === 'needs-subscription') && <ChangePassphrase />}
+          {sync.state === 'vault-conflict' && <VaultConflict />}
           {sync.state === 'loading' && <p className="text-sm text-muted">…</p>}
         </>
       )}
@@ -392,6 +393,42 @@ function RecoveryKeyPanel({ value, onDone }: { value: string; onDone: () => void
         </Secondary>
       </Row>
     </div>
+  );
+}
+
+/**
+ * Das Gerät hat noch nicht hochgeladene Änderungen eines anderen Kontos. Verwerfen ist nicht
+ * rückgängig zu machen, deshalb ist Abmelden die hervorgehobene Wahl: mit dem alten Konto
+ * angemeldet gehen die Änderungen noch hinaus.
+ */
+function VaultConflict(): React.ReactNode {
+  const sync = useSync();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <>
+      <h3 className="mb-2 text-heading-14">{t.sync.vaultConflictTitle}</h3>
+      <p className="text-sm">{t.sync.vaultConflictBody(sync.unsyncedOther)}</p>
+      <p className="mt-1 text-xs text-muted">{t.sync.vaultConflictHint}</p>
+      <Row>
+        <Primary type="button" onClick={() => void sync.signOut()}>
+          {t.sync.signOut}
+        </Primary>
+        <Secondary
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void sync
+              .discardOtherVault()
+              .catch(() => undefined)
+              .finally(() => setBusy(false));
+          }}
+        >
+          <span className="text-danger">{t.sync.vaultConflictDiscard}</span>
+        </Secondary>
+      </Row>
+    </>
   );
 }
 

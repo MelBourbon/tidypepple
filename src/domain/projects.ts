@@ -22,10 +22,12 @@ export function buildGraph(tasks: readonly Task[]): TaskGraph {
     if (!isLive(t)) continue;
     byId.set(t.id, t);
   }
+  const cut = cycleBreakers(byId);
   for (const t of byId.values()) {
     // Ein Elternteil, das gelöscht wurde, macht seine Kinder zu Wurzeln – sonst
-    // verschwinden sie unerreichbar aus jeder Ansicht.
-    if (t.parentId !== null && byId.has(t.parentId)) {
+    // verschwinden sie unerreichbar aus jeder Ansicht. Dasselbe gilt für die Aufgabe, an der
+    // ein Kreis aufgetrennt wird.
+    if (t.parentId !== null && byId.has(t.parentId) && !cut.has(t.id)) {
       const list = children.get(t.parentId);
       if (list) list.push(t);
       else children.set(t.parentId, [t]);
@@ -39,6 +41,35 @@ export function buildGraph(tasks: readonly Task[]): TaskGraph {
   roots.sort(byOrder);
 
   return { byId, childrenOf: children, roots };
+}
+
+/**
+ * Aufgaben, deren Elternverweis ignoriert wird, weil er einen Kreis schließt.
+ *
+ * Ein Kreis entsteht ohne Fehler im Programm: Zwei Geräte ordnen gleichzeitig X unter Y und
+ * Y unter X ein, und Last-Writer-Wins je Record übernimmt beides. Ohne Auftrennen wäre keine
+ * der Aufgaben Wurzel oder von einer Wurzel aus erreichbar – sie fehlten in jeder Ansicht.
+ * Aufgetrennt wird an der Aufgabe mit der kleinsten ID: so entscheiden alle Geräte gleich.
+ */
+function cycleBreakers(byId: ReadonlyMap<string, Task>): ReadonlySet<string> {
+  const cut = new Set<string>();
+  const settled = new Set<string>();
+  for (const start of byId.values()) {
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let current: Task | undefined = start;
+    while (current !== undefined && !settled.has(current.id) && !onPath.has(current.id)) {
+      path.push(current.id);
+      onPath.add(current.id);
+      current = current.parentId === null ? undefined : byId.get(current.parentId);
+    }
+    if (current !== undefined && onPath.has(current.id)) {
+      const cycle = path.slice(path.indexOf(current.id));
+      cut.add(cycle.reduce((min, id) => (id < min ? id : min)));
+    }
+    for (const id of path) settled.add(id);
+  }
+  return cut;
 }
 
 export const childrenOf = (graph: TaskGraph, id: string): readonly Task[] => graph.childrenOf.get(id) ?? [];

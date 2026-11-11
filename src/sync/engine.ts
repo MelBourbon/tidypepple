@@ -1,6 +1,6 @@
 import type { RemoteRecord, SyncAdapter } from './adapter';
 import type { BlobSync } from './blobs';
-import { isEntitlementRequired } from './errors';
+import { isEntitlementRequired, VaultSwitchError } from './errors';
 import { open, seal, type Envelope } from '@/crypto/envelope';
 import { isValidHlc } from '@/domain/hlc';
 import { getMeta, META_KEYS, setMeta } from '@/data/db';
@@ -13,6 +13,7 @@ import {
   onLocalChange,
   pendingRecords,
   resyncAll,
+  unsyncedForOtherVault,
   type PendingRecord,
   type RecordKind,
   type RemoteChange,
@@ -131,6 +132,10 @@ export class SyncEngine {
   private async runOnce(): Promise<SyncResult> {
     // Zuerst: Gehören die lokalen Daten überhaupt zu diesem Vault? Nach einem Wechsel wird
     // der alte Bestand verworfen, und Cursor wie Epoche beginnen für den neuen von vorn.
+    // Hängt daran noch nicht Hochgeladenes, wird nicht stillschweigend verworfen: der Lauf
+    // bricht ab, bis der Nutzer entschieden hat (`bindVault` aus den Einstellungen).
+    const unsynced = await unsyncedForOtherVault(this.vault.vaultId());
+    if (unsynced > 0) throw new VaultSwitchError(unsynced);
     await bindVault(this.vault.vaultId());
     await this.checkEpoch();
     let { pushed, blocked } = await this.pushAll();
@@ -279,7 +284,8 @@ export class SyncEngine {
         .catch((cause: unknown) => {
           onError?.(cause);
           // Mehrere Anlässe teilen sich einen Lauf und scheitern gemeinsam: nur ein Timer.
-          if (stopped || retry !== undefined) return;
+          // Und nichts, was nur der Nutzer auflösen kann.
+          if (stopped || retry !== undefined || cause instanceof VaultSwitchError) return;
           retry = setTimeout(run, retryDelay);
           retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
         });

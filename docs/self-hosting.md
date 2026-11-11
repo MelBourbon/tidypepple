@@ -15,7 +15,7 @@ determines the latency of every sync run.
 
 `supabase/migrations/0001_schema.sql` is the complete state of the database: tables, RLS
 policies, sync functions, subscriptions, attachments, server epoch and API tokens. Run the
-file in the SQL editor, then every newer file (`0002_…`, `0003_…`) in order.
+file in the SQL editor, then every newer file (`0002_…`, `0003_…`, …) in order.
 
 The Supabase CLI does both in one step:
 
