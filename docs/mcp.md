@@ -58,11 +58,14 @@ names and fields only change additively.
 - `changes_since` counts with its own counter, not via the HLC: an offline change arrives
   with an older timestamp and would otherwise slip through. The cursor is valid for one
   process only; after a restart, everything comes with `reset: true`.
-- `TIDYPEPPLE_ONLY_TAG=ai` limits the view to tasks with this tag; new tasks get it
-  automatically. This guards against sending too much context to the LLM provider, but it is
-  not a security boundary – the server holds the entire vault key.
-- Mappings to GitHub or Trello are stored by the script itself, not in the task:
-  `normalizeTask` discards unknown fields, and older app versions would delete them.
+- `TIDYPEPPLE_ONLY_TAG=ai` limits the view to tasks with this tag; new tasks and new projects
+  get it automatically. Tasks without the tag do not exist for the tools: no parent titles, no
+  step counts, only contexts that a visible task uses. `+Project` only finds projects with the
+  tag, and `delete_task` refuses a task that has steps without it. This guards against sending
+  too much context to the LLM provider, but it is not a security boundary – the MCP server
+  holds the entire vault key and syncs the whole vault.
+- Mappings to GitHub or Trello are stored by the script itself, not in the task: app versions
+  from before November 2026 drop fields they do not know when they edit a task.
 - Attachments: metadata only, no files.
 
 ### Build and publish

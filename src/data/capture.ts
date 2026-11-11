@@ -1,5 +1,6 @@
-import { addStep, createTask, ensureContexts, ensureProject } from './repo';
+import { addStep, createTask, ensureContexts, ensureProject, type ProjectScope } from './repo';
 import { captureDestination, parseQuickAdd } from '@/domain/quickAdd';
+import { withTag } from '@/domain/tags';
 import type { Task } from '@/domain/types';
 
 export interface CaptureResult {
@@ -18,7 +19,7 @@ export interface CaptureResult {
  *
  * `null`, wenn nach dem Parsen kein Titel übrig bleibt.
  */
-export async function captureTask(input: string): Promise<CaptureResult | null> {
+export async function captureTask(input: string, scope: ProjectScope = {}): Promise<CaptureResult | null> {
   const parsed = parseQuickAdd(input);
   if (parsed.title === '') return null;
 
@@ -26,7 +27,7 @@ export async function captureTask(input: string): Promise<CaptureResult | null> 
   const draft = {
     title: parsed.title,
     contexts: contextIds,
-    tags: [...parsed.tagNames],
+    tags: (scope.tags ?? []).reduce((acc, tag) => withTag(acc, tag), [...parsed.tagNames]),
     dueDate: parsed.dueDate,
     deferDate: parsed.deferDate,
     highPriority: parsed.highPriority,
@@ -35,7 +36,7 @@ export async function captureTask(input: string): Promise<CaptureResult | null> 
 
   if (parsed.projectName === null) return { task: await createTask(draft), promoted: null };
 
-  const project = await ensureProject(parsed.projectName);
+  const project = await ensureProject(parsed.projectName, scope);
   const { step, promoted } = await addStep(project.id, { ...draft, status: 'next' });
   return { task: step, promoted: promoted ? project : null };
 }

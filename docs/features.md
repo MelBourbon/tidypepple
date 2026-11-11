@@ -61,6 +61,9 @@ the device (IndexedDB, table `blobs`) and, with sync, encrypted in Supabase Stor
 device only downloads a file once the task is opened. Without a subscription, new
 attachments stay on the device. They are not included in the JSON backup.
 
+**Notes** hold up to 100,000 characters. On the server, a vault holds up to 50 MiB of encrypted
+tasks (about ten thousand tasks need 10 MiB).
+
 **Reminders:** Pick a date and time under “Reminder” in the detail view (local time, field
 `reminderAt`, synced like everything else). There are no automatic notifications, not even
 for due dates. Permission is requested only when the first reminder is set. Delivery depends

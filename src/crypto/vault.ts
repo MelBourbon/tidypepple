@@ -1,4 +1,4 @@
-import { createVault, unlockWithPassphrase, unlockWithRecoveryKey, type Keyring } from './keyring';
+import { changePassphrase as rewrap, createVault, unlockWithPassphrase, unlockWithRecoveryKey, type Keyring } from './keyring';
 import { db, getMeta, setMeta } from '@/data/db';
 
 /**
@@ -83,6 +83,33 @@ export async function restore(): Promise<boolean> {
   vaultKey = remembered.key;
   keyring = stored;
   return true;
+}
+
+/** Die bisherige Passphrase stimmt nicht – GCM meldet das als `OperationError`. */
+export class WrongPassphraseError extends Error {
+  readonly name = 'WrongPassphraseError';
+}
+
+/**
+ * Passphrase wechseln. Der Vault-Key wird nur neu verpackt; kein Record, kein anderes Gerät
+ * muss neu entsperrt werden.
+ *
+ * Erst `upload` (der Server), dann das Gerät: Scheitert der Server, bleibt hier alles beim
+ * Alten. Andersherum gälte auf diesem Gerät eine Passphrase, die kein anderes kennt.
+ */
+export async function changePassphrase(
+  oldPassphrase: string,
+  newPassphrase: string,
+  upload: (keyring: Keyring) => Promise<void>,
+): Promise<void> {
+  const stored = await requireKeyring();
+  const next = await rewrap(stored, oldPassphrase, newPassphrase).catch((cause: unknown) => {
+    if (cause instanceof DOMException && cause.name === 'OperationError') throw new WrongPassphraseError();
+    throw cause;
+  });
+  await upload(next);
+  await setMeta(KEYRING_KEY, next);
+  if (keyring?.vaultId === next.vaultId) keyring = next;
 }
 
 export async function lock(): Promise<void> {

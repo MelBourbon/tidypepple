@@ -9,12 +9,13 @@ import {
   hasSupabaseConfig,
   SupabaseBlobAdapter,
   SupabaseSyncAdapter,
+  updateKeyring,
 } from './supabase';
 import type { Attachment } from '@/domain/types';
 import { t } from '@/i18n';
 import { setMeta } from '@/data/db';
 import { bindVault } from '@/data/repo';
-import { VaultSwitchError } from './errors';
+import { RecordQuotaError, VaultSwitchError } from './errors';
 import type { ApiTokenScope } from '@/crypto/apiToken';
 import type { Keyring } from '@/crypto/keyring';
 import * as vault from '@/crypto/vault';
@@ -79,6 +80,8 @@ interface SyncContextValue {
   unlock: (passphrase: string) => Promise<void>;
   unlockWithRecovery: (recoveryKey: string) => Promise<void>;
   lock: () => void;
+  /** Nur entsperrt und angemeldet: der Server hält den Schlüsselbund für die anderen Geräte. */
+  changePassphrase: (oldPassphrase: string, newPassphrase: string) => Promise<void>;
   syncNow: () => Promise<void>;
   /**
    * Holt eine Anhang-Datei vom Server. `unavailable`: gerade wird nicht
@@ -118,7 +121,13 @@ export function useSync(): SyncContextValue {
 
 /** Fehlertexte sollen erklären, was zu tun ist – nicht, welche Exception geflogen ist. */
 const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : t.sync.unknownError;
+  error instanceof RecordQuotaError
+    ? t.sync.recordQuota
+    : error instanceof vault.WrongPassphraseError
+      ? t.api.wrongPassphrase
+      : error instanceof Error
+        ? error.message
+        : t.sync.unknownError;
 
 export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   // `null` = keine Konfiguration, `undefined` = wird noch geladen.
@@ -493,6 +502,12 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       setState('locked');
       void vault.lock();
     },
+
+    changePassphrase: (oldPassphrase, newPassphrase) =>
+      guard(async () => {
+        if (client === null || client === undefined) throw new Error('Kein Supabase-Projekt konfiguriert.');
+        await vault.changePassphrase(oldPassphrase, newPassphrase, (keyring) => updateKeyring(client, keyring));
+      }),
 
     canFetchAttachments,
     apiTokens:

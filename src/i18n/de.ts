@@ -354,6 +354,8 @@ export const de = {
     lastResult: (r: { pushed: number; pulled: number; filesUploaded: number }) =>
       `${r.pushed} gesendet · ${r.pulled} empfangen` +
       (r.filesUploaded > 0 ? ` · ${r.filesUploaded} ${r.filesUploaded === 1 ? 'Anhang' : 'Anhänge'} hochgeladen` : ''),
+    recordQuota:
+      'Der Speicher für Aufgaben auf dem Server ist voll. Neue Änderungen bleiben vorerst auf diesem Gerät – lösche erledigte oder alte Aufgaben mit langen Notizen.',
     filesQuota: 'Die 200 MB für Anhänge sind auf dem Server belegt. Neue Anhänge bleiben vorerst auf diesem Gerät.',
 
     setupTitle: 'Vault einrichten',
@@ -363,6 +365,14 @@ export const de = {
     passphraseRepeat: 'Passphrase wiederholen',
     passphraseMismatch: 'Die Passphrasen stimmen nicht überein.',
     passphraseTooShort: 'Bitte mindestens 10 Zeichen.',
+    changePassphrase: 'Passphrase ändern',
+    changePassphraseHint:
+      'Gilt sofort für alle Geräte. Entsperrte Geräte bleiben entsperrt; neue fragen nach der neuen Passphrase. Dein Wiederherstellungsschlüssel bleibt gültig.',
+    currentPassphrase: 'Bisherige Passphrase',
+    newPassphrase: 'Neue Passphrase',
+    changePassphraseSubmit: 'Ändern',
+    cancel: 'Abbrechen',
+    passphraseChanged: 'Die Passphrase ist geändert.',
     create: 'Vault anlegen',
 
     recoveryTitle: 'Wiederherstellungsschlüssel',

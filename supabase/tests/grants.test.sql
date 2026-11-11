@@ -76,9 +76,19 @@ begin
   foreach t in array array['public.profiles', 'public.vaults', 'public.vault_members', 'public.records', 'public.subscriptions'] loop
     assert has_table_privilege('authenticated', t, 'select'), format('authenticated muss %s lesen duerfen', t);
   end loop;
-  assert has_table_privilege('authenticated', 'public.records', 'insert'), 'authenticated muss Records einfuegen duerfen';
-  assert has_table_privilege('authenticated', 'public.records', 'update'), 'authenticated muss Records aendern duerfen';
-  assert has_sequence_privilege('authenticated', 'public.records_seq', 'usage'), 'authenticated muss records_seq nutzen duerfen';
+  -- Geschrieben wird nur über `push_records` (0005): Direkt am Tabellenrecht vorbei liefen
+  -- HLC-Vergleich, Sperre und `server_seq` ins Leere.
+  foreach t in array array['insert', 'update', 'delete', 'truncate'] loop
+    assert not has_table_privilege('authenticated', 'public.records', t), format('authenticated darf Records nicht direkt %s', t);
+    assert not has_table_privilege('anon', 'public.records', t), format('anon darf Records nicht direkt %s', t);
+  end loop;
+  assert not has_sequence_privilege('authenticated', 'public.records_seq', 'usage'), 'authenticated braucht records_seq nicht mehr';
+  assert not has_function_privilege('authenticated', 'private.write_records(uuid, jsonb)', 'execute'),
+    'authenticated darf write_records nicht direkt aufrufen';
+  assert has_function_privilege('authenticated', 'public.push_records(uuid, jsonb)', 'execute'),
+    'authenticated muss push_records ausfuehren duerfen';
+  assert not has_function_privilege('anon', 'public.push_records(uuid, jsonb)', 'execute'),
+    'anon darf push_records nicht ausfuehren';
   raise notice 'authenticated: Tabellenrechte ausdruecklich vergeben - bestanden';
 end;
 $$;

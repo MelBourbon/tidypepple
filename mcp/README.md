@@ -37,7 +37,7 @@ claude mcp add tidypepple --env TIDYPEPPLE_TOKEN=tp1.… -- npx -y tidypepple-mc
 | Variable | |
 |---|---|
 | `TIDYPEPPLE_TOKEN` | API token, required |
-| `TIDYPEPPLE_ONLY_TAG` | Only show and edit tasks with this tag, e.g. `ai`. New tasks get the tag automatically. |
+| `TIDYPEPPLE_ONLY_TAG` | Only show and edit tasks with this tag, e.g. `ai`. New tasks and projects get the tag automatically. Tasks without it stay invisible, including as parents and in context lists. A filter for what reaches the LLM, not a security boundary. |
 | `TIDYPEPPLE_SUPABASE_URL`, `TIDYPEPPLE_SUPABASE_ANON_KEY` | Only for self-hosted TidyPepple installations |
 
 Node ≥ 20. The vault lives in memory only. At startup, the server loads everything and then

@@ -33,6 +33,7 @@ export function SyncSettings(): React.ReactNode {
           {sync.state === 'locked' && <Unlock />}
           {sync.state === 'needs-subscription' && <Premium />}
           {sync.state === 'ready' && <Ready />}
+          {(sync.state === 'ready' || sync.state === 'needs-subscription') && <ChangePassphrase />}
           {sync.state === 'vault-conflict' && <VaultConflict />}
           {sync.state === 'loading' && <p className="text-sm text-muted">…</p>}
         </>
@@ -231,6 +232,93 @@ function VerifyCode({ email, onOtherEmail }: { email: string; onOtherEmail: () =
         </Primary>
         <Secondary type="button" onClick={onOtherEmail}>
           {t.sync.otherEmail}
+        </Secondary>
+      </Row>
+    </form>
+  );
+}
+
+/**
+ * Passphrase wechseln, eingeklappt: man braucht es selten, und offen stünden drei
+ * Passwortfelder dauerhaft in den Einstellungen.
+ */
+function ChangePassphrase(): React.ReactNode {
+  const sync = useSync();
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const tooShort = next.length > 0 && next.length < 10;
+  const mismatch = repeat.length > 0 && next !== repeat;
+  const valid = current !== '' && next.length >= 10 && next === repeat;
+
+  if (!open) {
+    return (
+      <>
+        {done && <p className="mt-3 text-xs text-muted">{t.sync.passphraseChanged}</p>}
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(true);
+            setDone(false);
+          }}
+          className="mt-3 block text-xs text-accent hover:underline"
+        >
+          {t.sync.changePassphrase}
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <form
+      className="mt-4 border-t border-line pt-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setBusy(true);
+        void sync
+          .changePassphrase(current, next)
+          .then(() => {
+            setCurrent('');
+            setNext('');
+            setRepeat('');
+            setOpen(false);
+            setDone(true);
+          })
+          .catch(() => undefined)
+          .finally(() => setBusy(false));
+      }}
+    >
+      <h3 className="text-heading-14">{t.sync.changePassphrase}</h3>
+      <p className="mt-1 mb-3 text-xs text-muted">{t.sync.changePassphraseHint}</p>
+
+      <label className="mb-1 block text-overline" htmlFor="pp-current">
+        {t.sync.currentPassphrase}
+      </label>
+      <Input id="pp-current" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+
+      <label className="mt-3 mb-1 block text-overline" htmlFor="pp-new">
+        {t.sync.newPassphrase}
+      </label>
+      <Input id="pp-new" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+
+      <label className="mt-3 mb-1 block text-overline" htmlFor="pp-new2">
+        {t.sync.passphraseRepeat}
+      </label>
+      <Input id="pp-new2" type="password" autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+
+      {tooShort && <p className="mt-1 text-xs text-danger">{t.sync.passphraseTooShort}</p>}
+      {mismatch && <p className="mt-1 text-xs text-danger">{t.sync.passphraseMismatch}</p>}
+
+      <Row>
+        <Primary type="submit" disabled={!valid || busy}>
+          {t.sync.changePassphraseSubmit}
+        </Primary>
+        <Secondary type="button" onClick={() => setOpen(false)}>
+          {t.sync.cancel}
         </Secondary>
       </Row>
     </form>

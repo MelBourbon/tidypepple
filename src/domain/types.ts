@@ -87,6 +87,13 @@ export interface Context {
   hlc: string;
 }
 
+/**
+ * Höchstlänge der Notizen. Der Server nimmt je Record höchstens 1 MiB Ciphertext an
+ * (0005_records_write_path.sql); 100 000 Zeichen bleiben auch mit Mehrbyte-Zeichen und
+ * Base64 sicher darunter. Ein längerer Record ließe jeden Push scheitern.
+ */
+export const MAX_NOTES_LENGTH = 100_000;
+
 /** Was ein Task-Entwurf mindestens braucht; alles andere wird mit Defaults gefüllt. */
 export type TaskDraft = Partial<Omit<Task, 'id' | 'createdAt' | 'hlc'>> & { title: string };
 
