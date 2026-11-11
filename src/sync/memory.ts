@@ -1,5 +1,5 @@
-import type { BlobAdapter, BlobUploadStatus, PullPage, RemoteRecord, SyncAdapter } from './adapter';
-import { EntitlementRequiredError } from './errors';
+import type { BlobAdapter, BlobUploadStatus, PullPage, ReencryptedRecord, RemoteRecord, SyncAdapter } from './adapter';
+import { EntitlementRequiredError, KeyOutdatedError } from './errors';
 import { isNewer } from '@/domain/hlc';
 
 /**
@@ -19,8 +19,15 @@ export class MemorySyncAdapter implements SyncAdapter {
    */
   blockPush = false;
 
+  /**
+   * Aktuelle Schlüsselversion des Vaults, wie im Schlüsselbund auf dem Server. Gesetzt weist
+   * der Push jede andere ab – wie `write_records` nach einer Rotation.
+   */
+  keyVersion: number | null = null;
+
   async push(records: readonly RemoteRecord[]): Promise<void> {
     if (this.blockPush) throw new EntitlementRequiredError();
+    if (this.keyVersion !== null && records.some((r) => r.keyVersion !== this.keyVersion)) throw new KeyOutdatedError();
     let changed = false;
     for (const record of records) {
       const existing = this.records.get(record.id);
@@ -43,6 +50,25 @@ export class MemorySyncAdapter implements SyncAdapter {
       cursor: slice.at(-1)?.serverSeq ?? cursor,
       hasMore: page.length > slice.length,
     };
+  }
+
+  /** Wie `reencrypt_records`: gleicher HLC, ältere Version, und `serverSeq` bleibt. */
+  async reencrypt(records: readonly ReencryptedRecord[]): Promise<number> {
+    let count = 0;
+    for (const record of records) {
+      const existing = this.records.get(record.id);
+      if (existing === undefined || existing.hlc !== record.hlc) continue;
+      if (this.keyVersion !== null && record.keyVersion !== this.keyVersion) continue;
+      if (existing.keyVersion >= record.keyVersion) continue;
+      this.records.set(record.id, { ...existing, iv: record.iv, ct: record.ct, keyVersion: record.keyVersion });
+      count += 1;
+    }
+    return count;
+  }
+
+  /** Alle Records, wie sie gerade auf dem "Server" liegen – für Tests. */
+  all(): RemoteRecord[] {
+    return [...this.records.values()];
   }
 
   async epoch(): Promise<string> {
@@ -88,5 +114,10 @@ export class MemoryBlobAdapter implements BlobAdapter {
 
   async remove(paths: readonly string[]): Promise<void> {
     for (const path of paths) this.files.delete(path);
+  }
+
+  async replace(path: string, data: Uint8Array<ArrayBuffer>): Promise<void> {
+    if (this.status === 'entitlement') throw new Error('Ersetzen verweigert: entitlement');
+    this.files.set(path, data);
   }
 }

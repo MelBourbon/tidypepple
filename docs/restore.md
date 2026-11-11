@@ -89,10 +89,20 @@ select to_regprocedure('public.sync_epoch()');                         -- server
 select pg_get_functiondef('private.has_active_sync(uuid)'::regprocedure)
   like '%email_confirmed_at%';                                          -- confirmed email (0001)
 select to_regclass('private.settings');                                 -- sync settings (0002)
+select to_regclass('private.vault_usage');                              -- record quota (0005)
+select to_regprocedure('public.update_keyring(uuid, jsonb)');           -- change passphrase (0006)
+select to_regprocedure('public.rotate_vault_key(uuid, text, jsonb, text)'); -- key renewal (0007)
 ```
 
 If `0002_sync_settings.sql` has to be applied again, `require_subscription` is back to
 `true` afterwards – on a self-hosted installation, switch it off again.
+
+**Key renewal after the backup:** If someone renewed their vault key after the backup was
+taken, the restored `vaults.keyring` is the old one – with the old key and the old recovery key.
+Their devices then get "key renewed elsewhere", fetch the old keyring and unlock with it. Tell
+affected users to renew the key again once the restore is done. To find them, compare
+`keyring->>'keyVersion'` in the backup with what devices report, or ask everyone who renewed
+since the backup date.
 
 ### 4. Catch up on subscriptions
 

@@ -1,9 +1,9 @@
-import type { RemoteRecord, SyncAdapter } from './adapter';
+import type { ReencryptedRecord, RemoteRecord, SyncAdapter } from './adapter';
 import type { BlobSync } from './blobs';
-import { isEntitlementRequired, VaultSwitchError } from './errors';
+import { isEntitlementRequired, KeyOutdatedError, VaultSwitchError } from './errors';
 import { open, seal, type Envelope } from '@/crypto/envelope';
 import { isValidHlc } from '@/domain/hlc';
-import { getMeta, META_KEYS, setMeta } from '@/data/db';
+import { db, getMeta, META_KEYS, setMeta } from '@/data/db';
 import {
   applyRemoteChanges,
   applyRemoteTombstone,
@@ -63,6 +63,8 @@ export interface SyncResult {
   filesUploaded: number;
   /** Anhänge konnten nicht hochgeladen werden: kein Abo oder Kontingent voll. */
   filesBlocked: 'entitlement' | 'quota' | null;
+  /** Nach einer Rotation mit dem neuen Schlüssel neu verschlüsselte Records und Dateien. */
+  reencrypted: number;
 }
 
 const NOTHING: SyncResult = {
@@ -72,6 +74,7 @@ const NOTHING: SyncResult = {
   pushBlocked: false,
   filesUploaded: 0,
   filesBlocked: null,
+  reencrypted: 0,
 };
 
 export interface VaultAccess {
@@ -79,7 +82,16 @@ export interface VaultAccess {
   keyVersion: () => number;
   /** Der Vault, zu dem der Schlüssel gehört: Cursor, Epoche und Outbox gelten nur für ihn. */
   vaultId: () => string;
+  /**
+   * Schlüssel für eine frühere Version (nach einer Rotation). Ohne: nur der aktuelle, ältere
+   * Records zählen als unlesbar.
+   */
+  keyFor?: (version: number) => CryptoKey | undefined;
 }
+
+/** Schlüssel für eine Version, oder `undefined`, wenn es keinen gibt. */
+export const keyOf = (vault: VaultAccess, version: number): CryptoKey | undefined =>
+  version === vault.keyVersion() ? vault.key() : vault.keyFor?.(version);
 
 /** Zwei Läufe zu einem Ergebnis: Zähler addieren, Sperren gelten wie im letzten Lauf. */
 const combine = (a: SyncResult, b: SyncResult): SyncResult => ({
@@ -89,6 +101,7 @@ const combine = (a: SyncResult, b: SyncResult): SyncResult => ({
   pushBlocked: b.pushBlocked,
   filesUploaded: a.filesUploaded + b.filesUploaded,
   filesBlocked: b.filesBlocked,
+  reencrypted: a.reencrypted + b.reencrypted,
 });
 
 export class SyncEngine {
@@ -142,6 +155,13 @@ export class SyncEngine {
     // Auch ohne Abo weiter herunterladen: sonst käme jemand, dessen Abo ausgelaufen ist,
     // auf einem neuen Gerät nicht mehr an die eigenen Daten.
     const { pulled, undecryptable } = await this.pullAll();
+    // Nach einer Rotation auf diesem Gerät: was auf dem Server noch alt verschlüsselt liegt.
+    // Nach einem Abbruch geht es beim nächsten Lauf weiter, die Markierung bleibt bis zum Ende.
+    let reencrypted = 0;
+    if ((await getMeta<number>(META_KEYS.reencryptPending)) === this.vault.keyVersion()) {
+      reencrypted = await this.reencryptAll();
+      await db.meta.delete(META_KEYS.reencryptPending);
+    }
     // Erst nach dem Pull sieht dieses Gerät die Kontexte der anderen. Die Zusammenführung
     // geht gleich mit hinaus, damit die anderen Geräte nicht auf den nächsten Anlass warten.
     if ((await mergeDuplicateContexts()) > 0 && !blocked) {
@@ -161,7 +181,47 @@ export class SyncEngine {
       pushBlocked: blocked,
       filesUploaded: files.uploaded,
       filesBlocked: files.blocked,
+      reencrypted,
     };
+  }
+
+  /** Wartet, bis ein laufender Durchgang fertig ist – Ergebnis und Fehler egal. */
+  async idle(): Promise<void> {
+    await this.running?.catch(() => undefined);
+  }
+
+  /**
+   * Alles, was auf dem Server noch mit einem früheren Schlüssel liegt, mit dem aktuellen neu
+   * verschlüsseln. Gelesen wird der Bestand des Servers, nicht der des Geräts: So kommen auch
+   * Tombstones mit, die hier schon weggeräumt sind. Der Inhalt bleibt Byte für Byte derselbe,
+   * der HLC auch – `reencrypt` übernimmt nur, was seitdem niemand geändert hat.
+   */
+  private async reencryptAll(): Promise<number> {
+    const current = this.vault.keyVersion();
+    let count = 0;
+    if (this.adapter.reencrypt !== undefined) {
+      let cursor = 0;
+      for (;;) {
+        const page = await this.adapter.pull(cursor, PAGE_SIZE);
+        const batch: ReencryptedRecord[] = [];
+        for (const record of page.records) {
+          if (record.keyVersion >= current || record.ct === '') continue;
+          const key = keyOf(this.vault, record.keyVersion);
+          if (key === undefined) continue;
+          try {
+            const payload = await open<unknown>(key, record.id, record);
+            const sealed = await seal(this.vault.key(), record.id, current, payload);
+            batch.push({ id: record.id, hlc: record.hlc, ...sealed });
+          } catch {
+            // Schon vorher unlesbar: bleibt, wie es ist.
+          }
+        }
+        count += await this.adapter.reencrypt(batch);
+        cursor = page.cursor;
+        if (!page.hasMore) break;
+      }
+    }
+    return count + ((await this.blobs?.reencryptAll()) ?? 0);
   }
 
   /**
@@ -240,8 +300,16 @@ export class SyncEngine {
           undecryptable += 1;
           continue;
         }
+        // Neuer als der eigene Schlüssel: Ein anderes Gerät hat rotiert. Anhalten, bevor der
+        // Cursor weiterläuft – sonst wäre dieser Record nach dem Entsperren für immer übergangen.
+        if (record.keyVersion > this.vault.keyVersion()) throw new KeyOutdatedError();
+        const key = keyOf(this.vault, record.keyVersion);
+        if (key === undefined) {
+          undecryptable += 1;
+          continue;
+        }
         try {
-          const payload = await open<SealedPayload>(this.vault.key(), record.id, {
+          const payload = await open<SealedPayload>(key, record.id, {
             iv: record.iv,
             ct: record.ct,
             keyVersion: record.keyVersion,
@@ -285,7 +353,7 @@ export class SyncEngine {
           onError?.(cause);
           // Mehrere Anlässe teilen sich einen Lauf und scheitern gemeinsam: nur ein Timer.
           // Und nichts, was nur der Nutzer auflösen kann.
-          if (stopped || retry !== undefined || cause instanceof VaultSwitchError) return;
+          if (stopped || retry !== undefined || cause instanceof VaultSwitchError || cause instanceof KeyOutdatedError) return;
           retry = setTimeout(run, retryDelay);
           retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
         });

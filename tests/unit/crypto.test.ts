@@ -47,8 +47,10 @@ describe('Vault', () => {
 
   it('liefert über den Recovery-Key denselben Schlüssel wie über die Passphrase', async () => {
     const { keyring, recoveryKey } = await createVault('geheim');
-    const viaPassphrase = await unlockWithPassphrase(keyring, 'geheim');
-    const viaRecovery = await unlockWithRecoveryKey(keyring, recoveryKey);
+    const { key: viaPassphrase, proof: proofA } = await unlockWithPassphrase(keyring, 'geheim');
+    const { key: viaRecovery, proof: proofB } = await unlockWithRecoveryKey(keyring, recoveryKey);
+    // Derselbe Schlüssel ergibt denselben Nachweis für den Server.
+    expect(proofA).toBe(proofB);
 
     const sealed = await seal(viaPassphrase, 'record-1', 1, { titel: 'Milch kaufen' });
     await expect(open(viaRecovery, 'record-1', sealed)).resolves.toEqual({ titel: 'Milch kaufen' });
@@ -61,7 +63,7 @@ describe('Vault', () => {
     const updated = await changePassphrase(keyring, 'alt', 'neu');
     await expect(unlockWithPassphrase(updated, 'alt')).rejects.toThrow();
 
-    const key = await unlockWithPassphrase(updated, 'neu');
+    const { key } = await unlockWithPassphrase(updated, 'neu');
     // Derselbe Ciphertext wie vorher – nur die Verpackung des Schlüssels hat sich geändert.
     await expect(open(key, 'record-1', sealed)).resolves.toEqual({ wert: 42 });
   });

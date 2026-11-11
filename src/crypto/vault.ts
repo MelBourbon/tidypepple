@@ -1,5 +1,15 @@
-import { changePassphrase as rewrap, createVault, unlockWithPassphrase, unlockWithRecoveryKey, type Keyring } from './keyring';
-import { db, getMeta, setMeta } from '@/data/db';
+import {
+  changePassphrase as rewrap,
+  createVault,
+  openPreviousKeys,
+  rotateKeyring,
+  unlockWithPassphrase,
+  unlockWithRecoveryKey,
+  type Keyring,
+  type RotatedVault,
+  type Unlocked,
+} from './keyring';
+import { db, getMeta, META_KEYS, setMeta } from '@/data/db';
 
 /**
  * Der entsperrte Schlüssel bleibt über einen Neustart erhalten: in IndexedDB
@@ -15,17 +25,32 @@ import { db, getMeta, setMeta } from '@/data/db';
 const KEYRING_KEY = 'keyring';
 const UNLOCKED_KEY = 'unlockedVaultKey';
 
-/** Der Schlüssel gehört zu genau einem Vault – ein anderer Schlüsselbund macht ihn wertlos. */
+/**
+ * Der Schlüssel gehört zu genau einem Vault und einer Schlüsselversion – ein anderer
+ * Schlüsselbund oder eine Rotation auf einem anderen Gerät macht ihn wertlos.
+ */
 interface StoredKey {
   vaultId: string;
+  /** Fehlt bei Schlüsseln, die vor der Rotation gespeichert wurden: dann Version 1. */
+  keyVersion?: number;
   key: CryptoKey;
 }
 
-const remember = (vaultId: string, key: CryptoKey): Promise<void> =>
-  setMeta(UNLOCKED_KEY, { vaultId, key } satisfies StoredKey);
-
 let vaultKey: CryptoKey | null = null;
 let keyring: Keyring | null = null;
+/** Frühere Schlüssel nach Version, für Records und Dateien, die noch nicht umgeschlüsselt sind. */
+let previousKeys = new Map<number, CryptoKey>();
+
+/** Entsperrt merken: im Speicher, und als `CryptoKey` für den nächsten Start. */
+async function activate(stored: Keyring, key: CryptoKey, persist: boolean): Promise<void> {
+  // Ein kaputter Eintrag soll das Entsperren nicht verhindern; ohne ihn sind nur alte
+  // Records unlesbar, und die zählt der Sync als solche.
+  const previous = await openPreviousKeys(stored, key).catch(() => new Map<number, CryptoKey>());
+  vaultKey = key;
+  keyring = stored;
+  previousKeys = previous;
+  if (persist) await setMeta(UNLOCKED_KEY, { vaultId: stored.vaultId, keyVersion: stored.keyVersion, key } satisfies StoredKey);
+}
 
 export const loadKeyring = (): Promise<Keyring | undefined> => getMeta<Keyring>(KEYRING_KEY);
 
@@ -33,15 +58,16 @@ export async function hasVault(): Promise<boolean> {
   return (await loadKeyring()) !== undefined;
 }
 
-/** Legt den Vault an. Der Wiederherstellungsschlüssel wird genau einmal zurückgegeben. */
-export async function setupVault(passphrase: string): Promise<{ recoveryKey: string }> {
+/**
+ * Legt den Vault an. Der Wiederherstellungsschlüssel wird genau einmal zurückgegeben,
+ * `proof` gehört zum Server (`register_key_check`).
+ */
+export async function setupVault(passphrase: string): Promise<{ recoveryKey: string; proof: string }> {
   if (await hasVault()) throw new Error('Es gibt bereits einen Vault auf diesem Gerät.');
   const created = await createVault(passphrase);
   await setMeta(KEYRING_KEY, created.keyring);
-  keyring = created.keyring;
-  vaultKey = created.vaultKey;
-  await remember(created.keyring.vaultId, created.vaultKey);
-  return { recoveryKey: created.recoveryKey };
+  await activate(created.keyring, created.vaultKey, true);
+  return { recoveryKey: created.recoveryKey, proof: created.proof };
 }
 
 async function requireKeyring(): Promise<Keyring> {
@@ -50,18 +76,19 @@ async function requireKeyring(): Promise<Keyring> {
   return stored;
 }
 
-export async function unlock(passphrase: string): Promise<void> {
+/** Entsperrt mit der Passphrase. Liefert den Nachweis für den Server (`register_key_check`). */
+export async function unlock(passphrase: string): Promise<string> {
   const stored = await requireKeyring();
-  vaultKey = await unlockWithPassphrase(stored, passphrase);
-  keyring = stored;
-  await remember(stored.vaultId, vaultKey);
+  const unlocked: Unlocked = await unlockWithPassphrase(stored, passphrase);
+  await activate(stored, unlocked.key, true);
+  return unlocked.proof;
 }
 
-export async function unlockWithRecovery(recoveryKey: string): Promise<void> {
+export async function unlockWithRecovery(recoveryKey: string): Promise<string> {
   const stored = await requireKeyring();
-  vaultKey = await unlockWithRecoveryKey(stored, recoveryKey);
-  keyring = stored;
-  await remember(stored.vaultId, vaultKey);
+  const unlocked = await unlockWithRecoveryKey(stored, recoveryKey);
+  await activate(stored, unlocked.key, true);
+  return unlocked.proof;
 }
 
 /**
@@ -71,18 +98,43 @@ export async function unlockWithRecovery(recoveryKey: string): Promise<void> {
 export async function restore(): Promise<boolean> {
   const [stored, remembered] = await Promise.all([loadKeyring(), getMeta<StoredKey>(UNLOCKED_KEY)]);
   if (stored === undefined) return false;
-  if (vaultKey !== null && keyring?.vaultId === stored.vaultId) return true;
+  if (vaultKey !== null && keyring?.vaultId === stored.vaultId && keyring.keyVersion === stored.keyVersion) return true;
   vaultKey = null;
   keyring = null;
+  previousKeys = new Map();
   if (remembered === undefined) return false;
-  // Hat der Server inzwischen einen anderen Vault geliefert, passt der Schlüssel nicht mehr.
-  if (remembered.vaultId !== stored.vaultId) {
+  // Hat der Server inzwischen einen anderen Vault geliefert, oder hat ein anderes Gerät den
+  // Schlüssel erneuert, passt der gespeicherte nicht mehr.
+  if (remembered.vaultId !== stored.vaultId || (remembered.keyVersion ?? 1) !== stored.keyVersion) {
     await db.meta.delete(UNLOCKED_KEY);
     return false;
   }
-  vaultKey = remembered.key;
-  keyring = stored;
+  await activate(stored, remembered.key, false);
   return true;
+}
+
+/**
+ * Den Vault-Key erneuern (`rotateKeyring`). `upload` übergibt den neuen Schlüsselbund dem
+ * Server (`rotate_vault_key`); erst danach gilt er auf dem Gerät – scheitert der Server,
+ * bleibt alles beim Alten.
+ *
+ * Danach steht `reencryptPending` auf der neuen Version: Die Sync-Engine schlüsselt beim
+ * nächsten Lauf alles um, was auf dem Server noch mit einem alten Schlüssel liegt, und macht
+ * nach einem Abbruch beim nächsten Lauf weiter.
+ *
+ * Liefert den neuen Wiederherstellungsschlüssel.
+ */
+export async function rotate(passphrase: string, upload: (rotated: RotatedVault) => Promise<void>): Promise<string> {
+  const stored = await requireKeyring();
+  const rotated = await rotateKeyring(stored, passphrase).catch((cause: unknown) => {
+    if (cause instanceof DOMException && cause.name === 'OperationError') throw new WrongPassphraseError();
+    throw cause;
+  });
+  await upload(rotated);
+  await setMeta(KEYRING_KEY, rotated.keyring);
+  await activate(rotated.keyring, rotated.vaultKey, true);
+  await setMeta(META_KEYS.reencryptPending, rotated.keyring.keyVersion);
+  return rotated.recoveryKey;
 }
 
 /** Die bisherige Passphrase stimmt nicht – GCM meldet das als `OperationError`. */
@@ -115,6 +167,7 @@ export async function changePassphrase(
 export async function lock(): Promise<void> {
   vaultKey = null;
   keyring = null;
+  previousKeys = new Map();
   await db.meta.delete(UNLOCKED_KEY);
 }
 
@@ -128,6 +181,12 @@ export function currentKey(): CryptoKey {
 export function currentKeyVersion(): number {
   if (keyring === null) throw new Error('Vault ist gesperrt.');
   return keyring.keyVersion;
+}
+
+/** Schlüssel für eine Version: der aktuelle oder ein früherer. `undefined`, wenn unbekannt. */
+export function keyFor(version: number): CryptoKey | undefined {
+  if (vaultKey === null || keyring === null) throw new Error('Vault ist gesperrt.');
+  return version === keyring.keyVersion ? vaultKey : previousKeys.get(version);
 }
 
 /**

@@ -363,6 +363,19 @@ export const en: Messages = {
     changePassphraseSubmit: 'Change',
     cancel: 'Cancel',
     passphraseChanged: 'Your passphrase has been changed.',
+    rotateKey: 'Renew key',
+    rotateKeyWhy:
+      'After revoking an API token or losing a device: whoever has the current key can no longer read anything stored on the server with it.',
+    rotateKeyEffects: [
+      'All tasks and attachments on the server are encrypted again. With many attachments, this takes a while.',
+      'All API tokens are revoked.',
+      'Your other devices ask for the passphrase once.',
+      'You get a new recovery key. The current one stops working.',
+    ],
+    rotateKeySubmit: 'Renew',
+    rotating: 'Renewing …',
+    recoveryReplaced: 'Your key has been renewed. Your previous recovery key no longer works.',
+    keyRotated: 'The key was renewed on another device. Enter your passphrase to keep syncing.',
     create: 'Create vault',
 
     recoveryTitle: 'Recovery key',
@@ -466,7 +479,7 @@ export const en: Messages = {
     revoke: 'Revoke',
     revokeConfirm: 'Really revoke?',
     revokeHint:
-      'Revoking blocks access immediately. Data already fetched with the token stays readable for whoever holds it.',
+      'Revoking blocks access immediately. Data already fetched with the token stays readable for whoever holds it. If the token was shared or lost, renew the key under Sync afterwards.',
     newTitle: 'New token',
     name: 'Name',
     namePlaceholder: 'e.g. Claude Desktop',

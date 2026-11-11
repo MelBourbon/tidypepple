@@ -67,6 +67,7 @@ names and fields only change additively.
 - Mappings to GitHub or Trello are stored by the script itself, not in the task: app versions
   from before November 2026 drop fields they do not know when they edit a task.
 - Attachments: metadata only, no files.
+- Renewing the vault key in the app revokes every API token. Create a new one afterwards.
 
 ### Build and publish
 

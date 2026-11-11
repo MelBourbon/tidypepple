@@ -11,6 +11,10 @@ export const ENTITLEMENT_REQUIRED_CODE = 'TP001';
 export const VAULT_FORBIDDEN_CODE = 'TP002';
 /** Der Speicher für Records des Vaults ist voll (0005_records_write_path.sql). */
 export const RECORD_QUOTA_CODE = 'TP006';
+/** Ein anderes Gerät hat den Vault-Key erneuert (0007_key_rotation.sql). */
+export const KEY_OUTDATED_CODE = 'TP007';
+/** Rotation ohne gültigen Nachweis des bisherigen Schlüssels. */
+export const KEY_PROOF_CODE = 'TP008';
 
 /** SQLSTATE aus den API-Funktionen – siehe `supabase/migrations/0001_schema.sql`. */
 export const API_TOKEN_INVALID_CODE = 'TP004';
@@ -40,6 +44,19 @@ export class RecordQuotaError extends Error {
   readonly name = 'RecordQuotaError';
 
   constructor(message = 'Der Speicher für Aufgaben ist voll.') {
+    super(message);
+  }
+}
+
+/**
+ * Dieses Gerät hat einen veralteten Vault-Key: Ein anderes hat ihn erneuert. Kein
+ * Netzwerkfehler – hier hilft nur, den neuen Schlüsselbund zu holen und neu zu entsperren.
+ * Bis dahin bleibt alles stehen, Outbox und Pull-Cursor eingeschlossen.
+ */
+export class KeyOutdatedError extends Error {
+  readonly name = 'KeyOutdatedError';
+
+  constructor(message = 'Der Vault-Schlüssel wurde auf einem anderen Gerät erneuert.') {
     super(message);
   }
 }

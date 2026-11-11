@@ -48,7 +48,15 @@ export interface SyncAdapter {
   epoch?(): Promise<string | null>;
   /** Optional: meldet fremde Änderungen, damit nicht gepollt werden muss. */
   subscribe?(onChange: () => void): () => void;
+  /**
+   * Optional: Ciphertext nach einer Rotation ersetzen (`reencrypt_records`). Der Server
+   * übernimmt nur, was denselben HLC hat wie gespeichert und eine ältere Schlüsselversion
+   * trägt; `server_seq` bleibt. Liefert die Zahl ersetzter Records.
+   */
+  reencrypt?(records: readonly ReencryptedRecord[]): Promise<number>;
 }
+
+export type ReencryptedRecord = Pick<RemoteRecord, 'id' | 'hlc' | 'iv' | 'ct' | 'keyVersion'>;
 
 /** Was der Server zum Hochladen von Anhängen sagt, bevor es versucht wird. */
 export type BlobUploadStatus = 'ok' | 'entitlement' | 'quota';
@@ -65,4 +73,6 @@ export interface BlobAdapter {
   download(path: string): Promise<Uint8Array<ArrayBuffer> | null>;
   /** Fehlende Dateien sind kein Fehler. */
   remove(paths: readonly string[]): Promise<void>;
+  /** Optional: eine vorhandene Datei ersetzen – für die Rotation, die Datei fehlt dabei nie. */
+  replace?(path: string, data: Uint8Array<ArrayBuffer>): Promise<void>;
 }
