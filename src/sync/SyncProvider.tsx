@@ -13,6 +13,8 @@ import {
 import type { Attachment } from '@/domain/types';
 import { t } from '@/i18n';
 import { setMeta } from '@/data/db';
+import { bindVault } from '@/data/repo';
+import { VaultSwitchError } from './errors';
 import type { ApiTokenScope } from '@/crypto/apiToken';
 import type { Keyring } from '@/crypto/keyring';
 import * as vault from '@/crypto/vault';
@@ -45,6 +47,11 @@ export type SyncState =
   | 'locked'
   /** Angemeldet und entsperrt, aber ohne aktives Abo: Pull läuft, Push ist gesperrt. */
   | 'needs-subscription'
+  /**
+   * Auf dem Gerät liegen nicht hochgeladene Änderungen eines anderen Kontos. Der Sync steht,
+   * bis der Nutzer sie verwirft oder sich abmeldet.
+   */
+  | 'vault-conflict'
   | 'ready'
   | 'error';
 
@@ -58,6 +65,10 @@ interface SyncContextValue {
   checkout: Checkout | null;
   /** Kaufen ohne Konto („erst bezahlen, dann anmelden“) – nur im Web. */
   purchaseWithoutAccount: boolean;
+  /** Bei `vault-conflict`: wie viele Änderungen und Dateien das Verwerfen kostet. */
+  unsyncedOther: number;
+  /** Bei `vault-conflict`: die Daten des anderen Kontos von diesem Gerät entfernen und synchronisieren. */
+  discardOtherVault: () => Promise<void>;
   /** Eigenes, berechtigendes Abo für die Anzeige, oder `null` (keins oder nicht lesbar). */
   subscription: SubscriptionInfo | null;
   signIn: (email: string) => Promise<void>;
@@ -123,6 +134,17 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   const [canFetchAttachments, setCanFetchAttachments] = useState(false);
   /** Hochgezählt, wenn das Netz zurück ist und der Vault noch einmal beim Server erfragt werden soll. */
   const [vaultCheck, setVaultCheck] = useState(0);
+  const [unsyncedOther, setUnsyncedOther] = useState(0);
+
+  /** Fehler eines Laufs. Der Vault-Wechsel ist keiner, sondern eine Frage an den Nutzer. */
+  const applyError = useCallback((cause: unknown) => {
+    if (cause instanceof VaultSwitchError) {
+      setUnsyncedOther(cause.unsynced);
+      setState((current) => (SYNCING_STATES.has(current) ? 'vault-conflict' : current));
+      return;
+    }
+    setError(messageOf(cause));
+  }, []);
   const stopEngine = useRef<(() => void) | null>(null);
   const [billing, setBilling] = useState<BillingProvider | null>(() => selectBilling(platform(), null));
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
@@ -190,7 +212,10 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
     // nur der Server, und der nächste Lauf stellt es ohnehin richtig.
     const settle = (unlocked: boolean): void => {
       setError(null);
-      setState((current) => (!unlocked ? 'locked' : SYNCING_STATES.has(current) ? current : 'ready'));
+      setState((current) =>
+        // Die offene Frage zum Vault-Wechsel bleibt stehen; die Engine stellte sie sonst nur erneut.
+        !unlocked ? 'locked' : SYNCING_STATES.has(current) || current === 'vault-conflict' ? current : 'ready',
+      );
     };
     void (async () => {
       try {
@@ -287,7 +312,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       engine.current = next;
       blobs.current = files;
       setCanFetchAttachments(true);
-      stopEngine.current = next.start(applyResult, (cause) => setError(messageOf(cause)));
+      stopEngine.current = next.start(applyResult, applyError);
     })();
 
     return () => {
@@ -298,7 +323,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
       blobs.current = null;
       setCanFetchAttachments(false);
     };
-  }, [client, canSync, applyResult]);
+  }, [client, canSync, applyResult, applyError]);
 
   const loadSubscription = useCallback(async () => {
     if (client === null || client === undefined) return;
@@ -384,6 +409,14 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
     checkout: withRefresh(billing?.checkout(session) ?? null),
     purchaseWithoutAccount: billing?.allowsPurchaseWithoutAccount ?? false,
     subscription,
+    unsyncedOther,
+    discardOtherVault: () =>
+      guard(async () => {
+        const keyring = await vault.loadKeyring();
+        if (keyring === undefined) throw new Error('Auf diesem Gerät ist kein Vault eingerichtet.');
+        await bindVault(keyring.vaultId);
+        setState((current) => (current === 'vault-conflict' ? 'ready' : current));
+      }),
     email: session?.user.email ?? null,
     error,
     pending: null,
@@ -483,8 +516,13 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
         if (state === 'needs-subscription' && playService.current !== null) {
           await restorePlayPurchases(playService.current, verifyPlayPurchase);
         }
-        const result = await engine.current?.syncOnce();
-        if (result !== undefined) applyResult(result);
+        try {
+          const result = await engine.current?.syncOnce();
+          if (result !== undefined) applyResult(result);
+        } catch (cause) {
+          if (!(cause instanceof VaultSwitchError)) throw cause;
+          applyError(cause);
+        }
       }),
   };
 

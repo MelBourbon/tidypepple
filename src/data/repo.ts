@@ -1,7 +1,7 @@
-import { generateKeyBetween } from 'fractional-indexing';
-import { db, META_KEYS, type OutboxEntry } from './db';
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
+import { db, getMeta, META_KEYS, type OutboxEntry } from './db';
 import { formatHlc, isNewer, isValidHlc, merge as mergeHlc, tick, type HlcState } from '@/domain/hlc';
-import { newDeviceId, uuidv7 } from '@/domain/ids';
+import { isUuid, newDeviceId, uuidFromText, uuidv7 } from '@/domain/ids';
 import { undoFields } from '@/domain/clarify';
 import { buildGraph, childrenOf, findReusableProject, selfAndDescendantIds, shouldAutoPromote } from '@/domain/projects';
 import { isLive, normalizeContext, normalizeTask, type Attachment, type Context, type Task, type TaskDraft, type TaskStatus } from '@/domain/types';
@@ -319,22 +319,73 @@ export const setProjectPinned = (id: string, pinned: boolean): Promise<void> =>
   updateTask(id, { pinnedAsProject: pinned });
 
 /**
+ * Lässt sich zwischen diesen beiden Schlüsseln einer erzeugen? Nicht bei gleichen oder
+ * verdrehten: Gleiche entstehen, wenn zwei Geräte offline je einen Schritt ans Ende desselben
+ * Projekts hängen – beide errechnen denselben Schlüssel.
+ */
+const hasGap = (low: string | undefined, high: string | undefined): boolean =>
+  low === undefined || high === undefined || low < high;
+
+/**
+ * Neue Schlüssel für eine ganze Geschwisterreihe, mit `movedId` vor `beforeId` bzw. hinter
+ * `afterId` (sonst am Ende). Für den Fall, dass zwischen den Nachbarn kein Platz ist. Liefert
+ * nur, was sich ändert.
+ */
+function renumber<R extends { id: string; order: string }>(
+  siblings: readonly R[],
+  movedId: string,
+  target: { afterId?: string | null; beforeId?: string | null },
+): Map<string, string> {
+  const ids = siblings
+    .filter((s) => s.id !== movedId)
+    .sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : a.id < b.id ? -1 : 1))
+    .map((s) => s.id);
+  const before = target.beforeId == null ? -1 : ids.indexOf(target.beforeId);
+  const after = target.afterId == null ? -1 : ids.indexOf(target.afterId);
+  ids.splice(before !== -1 ? before : after !== -1 ? after + 1 : ids.length, 0, movedId);
+
+  const keys = generateNKeysBetween(null, null, ids.length);
+  const current = new Map(siblings.map((s) => [s.id, s.order]));
+  return new Map(ids.map((id, i) => [id, keys[i]!] as const).filter(([id, key]) => id === movedId || current.get(id) !== key));
+}
+
+/**
  * Verschiebt eine Aufgabe zwischen zwei Geschwistern (Drag & Drop in Liste und Board).
  * `beforeId`/`afterId` sind die neuen Nachbarn; `null` bedeutet Rand.
+ *
+ * Ein Ziel unterhalb der Aufgabe selbst wird wie bei `setParent` abgelehnt (`false`).
  */
 export async function moveTask(
   id: string,
   target: { parentId?: string | null; afterId?: string | null; beforeId?: string | null },
-): Promise<void> {
-  const task = await db.tasks.get(id);
-  if (task === undefined) return;
+): Promise<boolean> {
+  const all = await db.tasks.toArray();
+  const graph = buildGraph(all);
+  const task = graph.byId.get(id);
+  if (task === undefined) return false;
   const parentId = target.parentId === undefined ? task.parentId : target.parentId;
+  if (parentId !== null && parentId !== task.parentId) {
+    if (!graph.byId.has(parentId) || selfAndDescendantIds(graph, id).has(parentId)) return false;
+  }
 
-  const after = target.afterId != null ? await db.tasks.get(target.afterId) : undefined;
-  const before = target.beforeId != null ? await db.tasks.get(target.beforeId) : undefined;
-  const order = generateKeyBetween(after?.order ?? null, before?.order ?? null);
+  const after = target.afterId != null ? graph.byId.get(target.afterId) : undefined;
+  const before = target.beforeId != null ? graph.byId.get(target.beforeId) : undefined;
+  if (hasGap(after?.order, before?.order)) {
+    await updateTask(id, { parentId, order: generateKeyBetween(after?.order ?? null, before?.order ?? null) });
+    return true;
+  }
 
-  await updateTask(id, { parentId, order });
+  // Kein Platz zwischen den Nachbarn: die Reihe unter dem Ziel neu durchnummerieren.
+  await mutate(async ({ hlc, dirty }) => {
+    const siblings = (await siblingsOf(parentId)).filter(isLive);
+    const orders = renumber(siblings, id, target);
+    const rows = (await db.tasks.bulkGet([...orders.keys()])).filter((t): t is Task => t !== undefined);
+    await db.tasks.bulkPut(
+      rows.map((t) => ({ ...t, order: orders.get(t.id)!, ...(t.id === id && { parentId }), hlc })),
+    );
+    for (const t of rows) dirty('task', t.id);
+  });
+  return true;
 }
 
 /** Schreibt neue Listenpositionen (siehe `planReorder`); `order` und Projektbezug bleiben. */
@@ -423,7 +474,18 @@ export async function moveContext(
 ): Promise<void> {
   const after = target.afterId != null ? await db.contexts.get(target.afterId) : undefined;
   const before = target.beforeId != null ? await db.contexts.get(target.beforeId) : undefined;
-  await updateContext(id, { order: generateKeyBetween(after?.order ?? null, before?.order ?? null) });
+  if (hasGap(after?.order, before?.order)) {
+    await updateContext(id, { order: generateKeyBetween(after?.order ?? null, before?.order ?? null) });
+    return;
+  }
+
+  // Gleiche Schlüssel, etwa von zwei Geräten gleichzeitig angelegt: alle neu durchnummerieren.
+  await mutate(async ({ hlc, dirty }) => {
+    const orders = renumber((await db.contexts.toArray()).filter(isLive), id, target);
+    const rows = (await db.contexts.bulkGet([...orders.keys()])).filter((c): c is Context => c !== undefined);
+    await db.contexts.bulkPut(rows.map((c) => ({ ...c, order: orders.get(c.id)!, hlc })));
+    for (const c of rows) dirty('context', c.id);
+  });
 }
 
 /** Kontext löschen und aus allen Aufgaben entfernen – sonst bleiben unsichtbare Filter zurück. */
@@ -543,6 +605,24 @@ export async function resyncAll(): Promise<void> {
       { key: META_KEYS.pullCursor, value: 0 },
     ]);
   });
+}
+
+/**
+ * Was ein Wechsel zu diesem Vault kosten würde: Änderungen und Dateien, die noch auf den
+ * Server des bisherigen warten und mit `bindVault` verloren gingen. 0, wenn das Gerät noch
+ * an keinen oder schon an diesen Vault gebunden ist.
+ *
+ * Ohne Abo läuft die Outbox voll – das können Wochen an Arbeit sein. Die Engine fragt
+ * deshalb hier nach, bevor sie bindet, und überlässt die Entscheidung dem Nutzer.
+ */
+export async function unsyncedForOtherVault(vaultId: string): Promise<number> {
+  const bound = await getMeta<string>(META_KEYS.syncVaultId);
+  if (bound === undefined || bound === vaultId) return 0;
+  const [records, files] = await Promise.all([
+    db.outbox.count(),
+    db.blobQueue.filter((entry) => entry.op === 'upload').count(),
+  ]);
+  return records + files;
 }
 
 /**
@@ -800,6 +880,23 @@ export async function importRecords(payload: ImportPayload): Promise<ImportResul
     .map(normalizeContext)
     .filter((c): c is Context => c !== null);
   if (validTasks.length === 0 && validContexts.length === 0) return { tasks: 0, contexts: 0 };
+
+  // Der Server speichert IDs als `uuid`. Eine andere ID – von Hand bearbeitete Datei, fremdes
+  // Werkzeug – ließe jeden Push scheitern, und mit ihr hinge die ganze Outbox fest. Solche
+  // Records bekommen eine UUID, Verweise auf sie ziehen mit.
+  const remap = new Map<string, string>();
+  for (const { id } of [...validTasks, ...validContexts]) {
+    if (!isUuid(id) && !remap.has(id)) remap.set(id, await uuidFromText(id));
+  }
+  if (remap.size > 0) {
+    const mapped = (id: string): string => remap.get(id) ?? id;
+    for (const t of validTasks) {
+      t.id = mapped(t.id);
+      t.parentId = t.parentId === null ? null : mapped(t.parentId);
+      t.contexts = t.contexts.map(mapped);
+    }
+    for (const c of validContexts) c.id = mapped(c.id);
+  }
 
   const result = await mutate(async ({ hlc, dirty }) => {
     await db.tasks.bulkPut(validTasks.map((t) => ({ ...t, hlc })));

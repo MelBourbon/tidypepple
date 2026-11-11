@@ -315,7 +315,16 @@ export const en: Messages = {
     locked: 'Locked',
     readOnly: 'Read only',
     signedOut: 'Signed out',
+    paused: 'Paused',
     unknownError: 'Unknown error while syncing.',
+    vaultConflictTitle: 'Data from another account on this device',
+    vaultConflictBody: (n: number) =>
+      n === 1
+        ? 'There is 1 change from another account here that has not been uploaded. Sync stays paused until you decide.'
+        : `There are ${n} changes from another account here that have not been uploaded. Sync stays paused until you decide.`,
+    vaultConflictHint:
+      'Sign out and sign in with the other account to upload them. Or discard them: the other account’s data is then removed from this device, and whatever was not uploaded is lost.',
+    vaultConflictDiscard: 'Discard and sync',
     vaultExists:
       'Your account already has a vault, created on another device. Unlock it with its passphrase.',
     title: 'Sync',

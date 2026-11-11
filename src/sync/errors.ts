@@ -38,5 +38,20 @@ export class ApiTokenInvalidError extends Error {
   }
 }
 
+/**
+ * Auf dem Gerät liegen noch nicht hochgeladene Änderungen eines anderen Vaults. Der Wechsel
+ * verwürfe sie – das entscheidet der Nutzer, nicht der Sync.
+ */
+export class VaultSwitchError extends Error {
+  readonly name = 'VaultSwitchError';
+
+  constructor(
+    /** Wie viele Änderungen und Dateien verloren gingen. */
+    readonly unsynced: number,
+  ) {
+    super('Auf diesem Gerät liegen nicht hochgeladene Änderungen eines anderen Kontos.');
+  }
+}
+
 export const isEntitlementRequired =(error: unknown): boolean =>
   error instanceof EntitlementRequiredError;

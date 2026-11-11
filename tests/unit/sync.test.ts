@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, getMeta, META_KEYS } from '@/data/db';
 import {
   applyRemoteChanges,
+  bindVault,
   createContext,
   createTask,
   deleteTask,
@@ -639,7 +640,13 @@ describe('Vault-Wechsel', () => {
     await updateTask(task.id, { title: 'Nie hochgeladen' });
     expect(await db.outbox.count()).toBe(1);
 
+    // Nicht stillschweigend: erst der Nutzer entscheidet, dass die Änderung verloren gehen darf.
     const other = new MemorySyncAdapter();
+    await expect(asVault('vault-b', other).syncOnce()).rejects.toMatchObject({ name: 'VaultSwitchError', unsynced: 1 });
+    expect(await db.outbox.count()).toBe(1);
+    expect((await db.tasks.get(task.id))?.title).toBe('Nie hochgeladen');
+
+    await bindVault('vault-b');
     await asVault('vault-b', other).syncOnce();
 
     expect((await other.pull(0, 100)).records).toHaveLength(0);
