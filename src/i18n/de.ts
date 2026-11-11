@@ -324,7 +324,16 @@ export const de = {
     locked: 'Gesperrt',
     readOnly: 'Nur Lesen',
     signedOut: 'Nicht angemeldet',
+    paused: 'Angehalten',
     unknownError: 'Unbekannter Fehler beim Synchronisieren.',
+    vaultConflictTitle: 'Daten eines anderen Kontos auf diesem Gerät',
+    vaultConflictBody: (n: number) =>
+      n === 1
+        ? 'Hier liegt noch 1 Änderung eines anderen Kontos, die nicht hochgeladen ist. Synchronisiert wird erst, wenn du entschieden hast.'
+        : `Hier liegen noch ${n} Änderungen eines anderen Kontos, die nicht hochgeladen sind. Synchronisiert wird erst, wenn du entschieden hast.`,
+    vaultConflictHint:
+      'Melde dich ab und mit dem anderen Konto an, um sie hochzuladen. Oder verwirf sie: Dann werden die Daten des anderen Kontos von diesem Gerät entfernt, und was nicht hochgeladen war, ist verloren.',
+    vaultConflictDiscard: 'Verwerfen und synchronisieren',
     vaultExists:
       'Für dein Konto gibt es schon einen Vault, angelegt auf einem anderen Gerät. Entsperre ihn mit seiner Passphrase.',
     title: 'Synchronisation',

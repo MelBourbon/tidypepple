@@ -23,6 +23,7 @@ import {
 } from '@/data/repo';
 import { buildGraph, isProject, nextSteps } from '@/domain/projects';
 import { isNewer } from '@/domain/hlc';
+import { isUuid, uuidFromText } from '@/domain/ids';
 
 beforeEach(async () => {
   await resetRepo();
@@ -67,7 +68,7 @@ describe('Schreibvorgänge', () => {
     });
 
     expect(result).toEqual({ tasks: 1, contexts: 1 });
-    expect(await db.tasks.get('kaputt')).toMatchObject({
+    expect(await db.tasks.get(await uuidFromText('kaputt'))).toMatchObject({
       status: 'inbox',
       contexts: [],
       parentId: null,
@@ -75,7 +76,7 @@ describe('Schreibvorgänge', () => {
       createdAt: 0,
       attachments: [{ id: 'a1', size: 0, name: '', type: 'application/octet-stream', addedAt: 0 }],
     });
-    expect(await db.contexts.get('k1')).toMatchObject({ name: 'Büro', order: 'a0', color: 'slate', deletedAt: null });
+    expect(await db.contexts.get(await uuidFromText('k1'))).toMatchObject({ name: 'Büro', order: 'a0', color: 'slate', deletedAt: null });
   });
 
   it('legt Kontexte aus einer Sicherung nicht doppelt an', async () => {
@@ -95,7 +96,7 @@ describe('Schreibvorgänge', () => {
     expect(live.map((c) => c.id)).toEqual([backupId]);
     // Alles, was auf den lokalen Kontext zeigte, zeigt jetzt auf den übernommenen.
     expect((await db.tasks.get(task.id))?.contexts).toEqual([backupId]);
-    expect((await db.tasks.get('aus-sicherung'))?.contexts).toEqual([backupId]);
+    expect((await db.tasks.get(await uuidFromText('aus-sicherung')))?.contexts).toEqual([backupId]);
     expect((await db.meta.get('contextFilter'))?.value).toEqual([backupId]);
   });
 
@@ -467,5 +468,78 @@ describe('Felder einer neueren App-Version', () => {
       neu: 1,
     });
     expect(normalizeContext({ id: 'c', name: 'Büro', order: 5, icon: 'haus' })).toMatchObject({ order: 'a0', icon: 'haus' });
+  });
+});
+
+describe('Sicherung mit fremden IDs', () => {
+  it('vergibt UUIDs, zieht Verweise mit und legt beim zweiten Einspielen nichts doppelt an', async () => {
+    const backup = {
+      contexts: [{ id: 'ctx-1', name: 'Werkstatt' }],
+      tasks: [
+        { id: 'P1', title: 'Regal bauen', status: 'next', pinnedAsProject: true },
+        { id: 'S1', title: 'Bretter kaufen', status: 'next', parentId: 'P1', contexts: ['ctx-1'] },
+      ],
+    };
+    await importRecords(backup);
+    await importRecords(backup);
+
+    const tasks = await db.tasks.toArray();
+    expect(tasks).toHaveLength(2);
+    // Was nicht als `uuid` in die Spalte passt, ließe jeden Push scheitern.
+    expect([...tasks, ...(await db.contexts.toArray())].every((r) => isUuid(r.id))).toBe(true);
+    const step = tasks.find((t) => t.title === 'Bretter kaufen')!;
+    expect(step.parentId).toBe(tasks.find((t) => t.title === 'Regal bauen')!.id);
+    expect(step.contexts).toEqual([await uuidFromText('ctx-1')]);
+  });
+});
+
+describe('Kreise und gleiche Schlüssel', () => {
+  it('zeigt Aufgaben weiter an, die sich gegenseitig als Elternteil haben', async () => {
+    const { applyRemoteChanges } = await import('@/data/repo');
+    const x = await createTask({ title: 'X', status: 'next' });
+    const y = await createTask({ title: 'Y', status: 'next', parentId: x.id });
+    // Ein anderes Gerät hat gleichzeitig X unter Y einsortiert.
+    const hlc = `${String(Date.now() + 1000).padStart(15, '0')}:0000:handy`;
+    await applyRemoteChanges([{ kind: 'task', value: { ...x, parentId: y.id, hlc } }]);
+
+    const g = await graph();
+    const [first, second] = x.id < y.id ? [x, y] : [y, x];
+    expect(g.roots.map((t) => t.id)).toEqual([first.id]);
+    expect(g.childrenOf.get(first.id)?.map((t) => t.id)).toEqual([second.id]);
+  });
+
+  it('verschiebt nicht unter die eigenen Schritte', async () => {
+    const p = await createTask({ title: 'Projekt' });
+    const step = await createTask({ title: 'Schritt', parentId: p.id });
+    expect(await moveTask(p.id, { parentId: step.id })).toBe(false);
+    expect((await db.tasks.get(p.id))?.parentId).toBeNull();
+  });
+
+  it('sortiert zwischen zwei Schritte mit gleichem Schlüssel ein', async () => {
+    const p = await createTask({ title: 'Projekt' });
+    // Zwei Geräte haben offline je einen Schritt angehängt und denselben Schlüssel errechnet.
+    const a = await createTask({ title: 'A', parentId: p.id, order: 'a1' });
+    const b = await createTask({ title: 'B', parentId: p.id, order: 'a1' });
+    const c = await createTask({ title: 'C', parentId: p.id });
+    const [first, second] = a.id < b.id ? [a, b] : [b, a];
+
+    expect(await moveTask(c.id, { afterId: first.id, beforeId: second.id })).toBe(true);
+
+    const steps = (await graph()).childrenOf.get(p.id)!;
+    expect(steps.map((t) => t.title)).toEqual([first.title, 'C', second.title]);
+    expect(new Set(steps.map((t) => t.order)).size).toBe(3);
+  });
+
+  it('sortiert zwischen zwei Kontexte mit gleichem Schlüssel ein', async () => {
+    const a = await createContext('A');
+    const b = await createContext('B');
+    const c = await createContext('C');
+    await db.contexts.bulkPut([{ ...a, order: 'a1' }, { ...b, order: 'a1' }]);
+    const [first, second] = a.id < b.id ? [a, b] : [b, a];
+
+    await moveContext(c.id, { afterId: first.id, beforeId: second.id });
+
+    const sorted = (await db.contexts.orderBy('order').toArray()).map((x) => x.name);
+    expect(sorted).toEqual([first.name, 'C', second.name]);
   });
 });

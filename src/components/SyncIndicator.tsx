@@ -41,6 +41,7 @@ function describe(
   if (state === 'unconfigured') return { label: t.sync.localOnly, tone: 'bg-subtle' };
   if (state === 'signed-out') return { label: t.sync.signedOut, tone: 'bg-subtle' };
   if (state === 'locked' || state === 'needs-vault') return { label: t.sync.locked, tone: 'bg-danger' };
+  if (state === 'vault-conflict') return { label: t.sync.paused, tone: 'bg-danger' };
   if (!online) return { label: t.sync.offline, tone: 'bg-warn-dot' };
   // Ohne Abo wird weiterhin heruntergeladen. "Synchron" wäre hier gelogen, denn die
   // eigenen Änderungen liegen noch in der Outbox.
