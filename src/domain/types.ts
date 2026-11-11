@@ -105,6 +105,7 @@ const normalizeAttachment = (value: unknown): Attachment | null => {
   const a = value as Partial<Attachment> | null;
   if (a === null || typeof a !== 'object' || typeof a.id !== 'string' || a.id === '') return null;
   return {
+    ...a,
     id: a.id,
     name: str(a.name, ''),
     type: str(a.type, 'application/octet-stream'),
@@ -120,6 +121,11 @@ const normalizeAttachment = (value: unknown): Attachment | null => {
  *
  * Ohne diese Prüfung reichte ein einziges `contexts: null` in einer Sicherung, um jede Liste
  * zum Absturz zu bringen – und über die Outbox auf allen Geräten.
+ *
+ * Unbekannte Felder bleiben erhalten: Sie stammen von einer neueren App-Version. Fielen sie
+ * hier weg, schriebe ein noch nicht aktualisiertes Gerät die Aufgabe bei der nächsten
+ * Bearbeitung ohne sie zurück – und löschte sie damit auf allen Geräten. Dasselbe gilt für
+ * Anhänge und Kontexte.
  */
 export function normalizeTask(value: unknown): Task | null {
   const t = value as Partial<Record<keyof Task, unknown>> | null;
@@ -127,6 +133,7 @@ export function normalizeTask(value: unknown): Task | null {
   if (typeof t.id !== 'string' || t.id === '' || typeof t.title !== 'string') return null;
   const parentId = strOrNull(t.parentId);
   return {
+    ...t,
     id: t.id,
     title: t.title,
     notes: str(t.notes, ''),
@@ -162,6 +169,7 @@ export function normalizeContext(value: unknown): Context | null {
   if (c === null || typeof c !== 'object') return null;
   if (typeof c.id !== 'string' || c.id === '' || typeof c.name !== 'string') return null;
   return {
+    ...c,
     id: c.id,
     name: c.name,
     color: str(c.color, 'slate'),

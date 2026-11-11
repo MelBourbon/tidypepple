@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dexie from 'dexie';
 import { db, TidyDb } from '@/data/db';
 import {
@@ -394,5 +394,78 @@ describe('Inbox klären', () => {
     expect((await load(t.id)).deletedAt).not.toBeNull();
     await undo!();
     expect((await load(t.id)).deletedAt).toBeNull();
+  });
+});
+
+describe('Zweites Fenster auf derselben Datenbank', () => {
+  const load = async (id: string) => (await db.tasks.get(id))!;
+
+  it('stempelt neuer als ein Stand, den das andere Fenster geholt hat', async () => {
+    const { applyRemoteChanges } = await import('@/data/repo');
+    const t = await createTask({ title: 'Original', status: 'next' });
+
+    // Das andere Fenster: eine eigene Modulinstanz mit eigener Uhr im Speicher.
+    vi.resetModules();
+    const other = await import('@/data/repo');
+    await other.initRepo();
+    // Ein Gerät, dessen Systemuhr fünf Minuten vorgeht.
+    const remoteHlc = `${String(Date.now() + 5 * 60_000).padStart(15, '0')}:0000:handy`;
+    await other.applyRemoteChanges([{ kind: 'task', value: { ...t, title: 'Vom Handy', hlc: remoteHlc } }]);
+
+    await updateTask(t.id, { title: 'Hier bearbeitet' });
+
+    // Sonst verwürfe der Server die Bearbeitung, und die Outbox hakte sie trotzdem ab.
+    const now = await load(t.id);
+    expect(now.title).toBe('Hier bearbeitet');
+    expect(isNewer(now.hlc, remoteHlc)).toBe(true);
+
+    // Auch der Rückweg: ein fremder Stand in diesem Fenster zieht die Uhr des anderen nach.
+    const later = `${String(Date.now() + 10 * 60_000).padStart(15, '0')}:0000:handy`;
+    await applyRemoteChanges([{ kind: 'task', value: { ...t, title: 'Noch einmal', hlc: later } }]);
+    await other.updateTask(t.id, { title: 'Im anderen Fenster' });
+    expect(isNewer((await load(t.id)).hlc, later)).toBe(true);
+  });
+
+  it('vergibt keine Outbox-Nummer doppelt', async () => {
+    await createTask({ title: 'Eins' });
+    vi.resetModules();
+    const other = await import('@/data/repo');
+    await other.initRepo();
+    await other.createTask({ title: 'Zwei' });
+    await createTask({ title: 'Drei' });
+
+    const seqs = (await db.outbox.toArray()).map((e) => e.seq);
+    expect(new Set(seqs).size).toBe(3);
+  });
+});
+
+describe('Felder einer neueren App-Version', () => {
+  it('übersteht Sync und Bearbeitung auf einem älteren Gerät', async () => {
+    const { applyRemoteChanges, pendingRecords } = await import('@/data/repo');
+    const t = await createTask({ title: 'Mit Zukunft', status: 'next' });
+    const hlc = `${String(Date.now() + 1000).padStart(15, '0')}:0000:neu`;
+    const fromNewer = {
+      ...t,
+      hlc,
+      energy: 'low',
+      attachments: [{ id: 'a1', name: 'x.pdf', type: 'application/pdf', size: 1, addedAt: 1, pages: 3 }],
+    };
+    await applyRemoteChanges([{ kind: 'task', value: fromNewer as unknown as typeof t }]);
+
+    await updateTask(t.id, { title: 'Hier umbenannt' });
+
+    // Was hinausgeht, trägt die unbekannten Felder weiter.
+    const pushed = (await pendingRecords()).find((r) => r.id === t.id)?.value;
+    expect(pushed).toMatchObject({ title: 'Hier umbenannt', energy: 'low', attachments: [{ id: 'a1', pages: 3 }] });
+  });
+
+  it('prüft bekannte Felder weiterhin', async () => {
+    const { normalizeContext, normalizeTask } = await import('@/domain/types');
+    expect(normalizeTask({ id: 'a', title: 'x', contexts: null, status: 'kaputt', neu: 1 })).toMatchObject({
+      contexts: [],
+      status: 'inbox',
+      neu: 1,
+    });
+    expect(normalizeContext({ id: 'c', name: 'Büro', order: 5, icon: 'haus' })).toMatchObject({ order: 'a0', icon: 'haus' });
   });
 });

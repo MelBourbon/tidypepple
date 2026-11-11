@@ -384,6 +384,34 @@ describe('Anlässe zum Synchronisieren', () => {
   });
 });
 
+describe('Wiederholung nach einem Fehler', () => {
+  it('versucht es von selbst erneut, ohne neuen Anlass', async () => {
+    const noop = { addEventListener: () => undefined, removeEventListener: () => undefined };
+    vi.stubGlobal('window', noop);
+    vi.stubGlobal('document', { ...noop, visibilityState: 'visible' });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const task = await createTask({ title: 'Kommt später an', status: 'next' });
+      const push = adapter.push.bind(adapter);
+      let down = true;
+      adapter.push = (records) => (down ? Promise.reject(new Error('network down')) : push(records));
+
+      const errors: unknown[] = [];
+      const stop = engine.start(undefined, (error) => errors.push(error));
+      await vi.waitFor(() => expect(errors).toHaveLength(1));
+
+      down = false;
+      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.waitFor(async () => expect((await readFromServer(task.id)).title).toBe('Kommt später an'));
+      expect(errors).toHaveLength(1);
+      stop();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('Tombstones', () => {
   it('markiert gelöschte Records für den Server, ohne den Inhalt preiszugeben', async () => {
     const task = await createTask({ title: 'Streng geheim', status: 'next' });
