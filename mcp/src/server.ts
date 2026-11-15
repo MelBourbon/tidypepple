@@ -16,6 +16,11 @@ const status = z.enum(TASK_STATUSES);
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 const time = z.string().regex(/^\d{2}:\d{2}$/, 'HH:mm');
 const localDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'YYYY-MM-DDTHH:mm');
+// Checklisten leben in den Notizen (src/domain/checklist.ts) – dasselbe Format, damit die App sie zum Abhaken zeigt.
+const notesSchema = z
+  .string()
+  .max(MAX_NOTES_LENGTH)
+  .describe('Freitext. Checklisten als Markdown-Zeilen: "- [ ] Punkt" offen, "- [x] Punkt" erledigt.');
 const taskId = z.string().min(1).describe('ID der Aufgabe, wie list_tasks sie liefert');
 
 const publicTask = z.object({
@@ -180,7 +185,7 @@ export function createServer(api: TaskApi, options: { writable: boolean; version
         'Daten: heute, morgen, mo…so, +3, 2026-10-01, 1.10. Ohne Kontext und Datum landet sie in der Inbox.',
       inputSchema: {
         text: z.string().min(1).max(1000),
-        notes: z.string().max(MAX_NOTES_LENGTH).optional(),
+        notes: notesSchema.optional(),
       },
       outputSchema: taskResult,
     },
@@ -197,7 +202,7 @@ export function createServer(api: TaskApi, options: { writable: boolean; version
       inputSchema: {
         id: taskId,
         title: z.string().max(1000).optional(),
-        notes: z.string().max(MAX_NOTES_LENGTH).optional(),
+        notes: notesSchema.optional(),
         status: status.optional(),
         dueDate: isoDate.nullable().optional(),
         dueTime: time.nullable().optional(),

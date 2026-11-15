@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/AttachmentSection';
 import { CompletedStamp } from '@/components/CompletedStamp';
 import { CreatedStamp } from '@/components/CreatedStamp';
+import { NotesField } from '@/components/NotesField';
 import { OrderButtons } from '@/components/OrderButtons';
 import { PickerChip } from '@/components/PickerChip';
 import { PriorityFlag } from '@/components/PriorityFlag';
@@ -12,7 +13,7 @@ import { useContexts, useGraph, useTags, useTask } from '@/data/hooks';
 import { ensureContexts, ensureProject, moveTask, setParent, updateTask } from '@/data/repo';
 import { childrenOf, isProject, projectCandidates, type TaskGraph } from '@/domain/projects';
 import { tagKey, withoutTag, withTag } from '@/domain/tags';
-import { MAX_NOTES_LENGTH, TASK_STATUSES, type Context, type ProjectMode, type Task, type TaskStatus } from '@/domain/types';
+import { TASK_STATUSES, type Context, type ProjectMode, type Task, type TaskStatus } from '@/domain/types';
 import { t } from '@/i18n';
 import {
   reminderSupport,
@@ -229,18 +230,7 @@ function TaskEditor({ id }: { id: string | undefined }): React.ReactNode {
         )}
       </section>
 
-      <section className="mt-5">
-        <h2 className="mb-2 text-overline">{t.task.notes}</h2>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={flushNotes}
-          rows={4}
-          maxLength={MAX_NOTES_LENGTH}
-          placeholder={t.task.notesPlaceholder}
-          className="w-full rounded-md border border-line bg-surface p-3 text-sm outline-none hover:border-line-strong focus:border-accent"
-        />
-      </section>
+      <NotesField notes={notes} setNotes={setNotes} flushNotes={flushNotes} />
 
       <AttachmentSection task={task} />
     </div>

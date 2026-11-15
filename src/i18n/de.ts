@@ -82,6 +82,11 @@ export const de = {
   task: {
     notes: 'Notizen',
     notesPlaceholder: 'Gedanken, Links, Details …',
+    checklist: 'Checkliste',
+    addChecklist: '+ Checkliste',
+    addItem: 'Punkt hinzufügen',
+    editNotes: 'Bearbeiten',
+    checklistProgress: (done: number, total: number) => `${done} von ${total} Punkten erledigt`,
     steps: 'Nächste Schritte',
     addStep: 'Schritt hinzufügen',
     dueDate: 'Fällig am',

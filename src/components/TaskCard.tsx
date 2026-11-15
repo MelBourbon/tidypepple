@@ -5,6 +5,7 @@ import { DueBadge } from './DueBadge';
 import { PriorityFlag } from './PriorityFlag';
 import { ReminderBadge } from './ReminderBadge';
 import { WaitingBadge } from './WaitingBadge';
+import { checklistProgress } from '@/domain/checklist';
 import type { ProjectProgress } from '@/domain/projects';
 import { hasPendingReminder } from '@/domain/reminders';
 import type { Context, Task } from '@/domain/types';
@@ -45,6 +46,7 @@ export function TaskCard({
 }: TaskCardProps): React.ReactNode {
   const done = task.status === 'done';
   const taskContexts = contexts.filter((c) => task.contexts.includes(c.id));
+  const checklist = checklistProgress(task.notes);
   const hasMeta =
     taskContexts.length > 0 ||
     task.tags.length > 0 ||
@@ -54,6 +56,7 @@ export function TaskCard({
     project !== undefined ||
     progress !== undefined ||
     task.attachments.length > 0 ||
+    checklist !== null ||
     (done && task.completedAt !== null);
 
   return (
@@ -135,6 +138,7 @@ export function TaskCard({
             ))}
             {project !== undefined && <ProjectChip project={project} />}
             <CompletedStamp task={task} />
+            {checklist !== null && <ChecklistBadge done={checklist.done} total={checklist.total} />}
             {task.attachments.length > 0 && (
               <span className="inline-flex items-center gap-0.5 text-xs text-muted" title={t.attachments.count(task.attachments.length)}>
                 {/* Büroklammer (Lucide „paperclip", ISC-Lizenz) */}
@@ -174,6 +178,27 @@ export function TaskCard({
       )}
       {handle}
     </div>
+  );
+}
+
+/** Fortschritt der Checkliste in den Notizen – ein Blick genügt, ob der Einkauf vollständig ist. */
+function ChecklistBadge({ done, total }: { done: number; total: number }): React.ReactNode {
+  const label = t.task.checklistProgress(done, total);
+  return (
+    <span
+      className={['inline-flex items-center gap-0.5 text-xs', done === total ? 'text-accent' : 'text-muted'].join(' ')}
+      title={label}
+    >
+      {/* Abgehaktes Kästchen (Lucide „square-check", ISC-Lizenz) */}
+      <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      <span aria-hidden="true">
+        {done}/{total}
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 
