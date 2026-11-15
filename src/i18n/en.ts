@@ -77,6 +77,11 @@ export const en: Messages = {
   task: {
     notes: 'Notes',
     notesPlaceholder: 'Thoughts, links, details …',
+    checklist: 'Checklist',
+    addChecklist: '+ Checklist',
+    addItem: 'Add item',
+    editNotes: 'Edit',
+    checklistProgress: (done: number, total: number) => `${done} of ${total} items done`,
     steps: 'Next steps',
     addStep: 'Add step',
     dueDate: 'Due',

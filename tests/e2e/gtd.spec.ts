@@ -884,3 +884,31 @@ test('zeigt im Detail, wann eine Aufgabe erfasst wurde und wie alt sie ist', asy
   await page.getByRole('link', { name: 'Alte Sache' }).click();
   await expect(page.getByText(/^Erstellt am .+ \(heute\)$/)).toBeVisible();
 });
+
+test('führt eine kleine Checkliste in den Notizen, ohne Projekt (Issue #9)', async ({ page }) => {
+  await capture(page, 'Einkaufen @büro');
+  await page.getByRole('link', { name: 'Einkaufen' }).click();
+
+  await page.getByRole('button', { name: '+ Checkliste' }).click();
+  const item = page.getByRole('textbox', { name: 'Punkt hinzufügen' });
+  await expect(item).toBeFocused();
+  await item.fill('Milch');
+  await item.press('Enter');
+  await item.fill('Brot');
+  await item.press('Enter');
+  await expect(item).toBeFocused();
+
+  await page.getByRole('checkbox', { name: 'Milch' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Milch' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('checkbox', { name: 'Brot' })).toHaveAttribute('aria-checked', 'false');
+  // Die Punkte sind Notizen, keine Schritte: die Aufgabe wird kein Projekt.
+  await expect(page.getByRole('button', { name: 'Gleichzeitig' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Bearbeiten' }).click();
+  await expect(page.getByRole('textbox', { name: 'Notizen' })).toHaveValue('- [x] Milch\n- [ ] Brot');
+  await page.getByRole('button', { name: 'Schließen' }).click();
+
+  const row = page.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Einkaufen' }) });
+  await expect(row.getByText('1 von 2 Punkten erledigt')).toBeAttached();
+  await expect(row.getByText('1/2')).toBeVisible();
+});
